@@ -1,0 +1,26 @@
+# requirements.txt — Fábrica de Achadinhos
+# Instalar: pip install -r requirements.txt
+
+# Interface
+streamlit>=1.30.0
+
+# Google Sheets API (leitura/escrita)
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+
+# Geração de roteiro (Gemini)
+google-genai>=1.0.0
+
+# Locução TTS
+edge-tts>=6.1.0
+
+# Processamento de áudio/trilha
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Imagens (badge, CTA, legendas)
+Pillow>=10.0.0
+
+# Requisições HTTP
+requests>=2.31.0

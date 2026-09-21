@@ -1,0 +1,35 @@
+# Ambiente virtual
+.venv/
+
+# Cache do Python
+__pycache__/
+*.pyc
+
+# Variáveis sensíveis
+.env
+.google_token.json
+client_secret_*.json
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Mídias e renders (muito pesadas pro git)
+Midias/
+renders/
+Produtos/
+
+# Fonts
+fonts/*.ttf
+
+# Arquivos binários gerados
+*.mp3
+*.wav
+*.mp4
+*.png
+*.ods
+*.ass
+
+# Temp
+*.tmp
+*.log
