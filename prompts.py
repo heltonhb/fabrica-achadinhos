@@ -18,6 +18,15 @@ from metricas import PostComDesempenho, formatar_exemplos_para_prompt
 logger = logging.getLogger(__name__)
 
 
+def _gerar_com_fallback(fn, fallback: str, rotulo: str) -> tuple[str, str | None]:
+    """Executa ``fn``; em falha retorna ``(fallback, erro)`` senão ``(texto, None)``."""
+    try:
+        return fn().strip(), None
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Gemini falhou em %s: %s", rotulo, exc)
+        return fallback, str(exc)
+
+
 @dataclass
 class PromptCriativo:
     produto_id: str
@@ -206,28 +215,43 @@ Part 2 must contain:
 The prompt must be SELF-CONTAINED.
 Do NOT include subtitle/caption instructions (those are generated separately)."""
 
-    try:
-        texto_p1 = _chamar_gemini(_SYSTEM_VIDEO_BASE, user_p1, temperature=0.9)
-        texto_p2 = _chamar_gemini(_SYSTEM_VIDEO_BASE, user_p2, temperature=0.9)
-    except Exception as exc:
-        logger.error("Gemini falhou: %s", exc)
-        texto_p1 = f"[ERRO GEMINI] Parte 1 — {plataforma_nome} — {nome}. Gancho: {gancho}"
-        texto_p2 = f"[ERRO GEMINI] Parte 2 — {plataforma_nome} — {nome}. Plot twist + CTA."
+    # Partes independentes: falha em uma não zera a outra
+    texto_p1, err_p1 = _gerar_com_fallback(
+        lambda: _chamar_gemini(_SYSTEM_VIDEO_BASE, user_p1, temperature=0.9),
+        f"[ERRO GEMINI] Parte 1 — {plataforma_nome} — {nome}. Gancho: {gancho}",
+        rotulo="Parte 1",
+    )
+    texto_p2, err_p2 = _gerar_com_fallback(
+        lambda: _chamar_gemini(_SYSTEM_VIDEO_BASE, user_p2, temperature=0.9),
+        f"[ERRO GEMINI] Parte 2 — {plataforma_nome} — {nome}. Plot twist + CTA.",
+        rotulo="Parte 2",
+    )
+    if err_p1 or err_p2:
+        logger.error(
+            "Gemini falhou ao gerar prompt (%s): parte1=%s | parte2=%s",
+            nome, err_p1 or "ok", err_p2 or "ok",
+        )
 
     n_exemplos = len(exemplos) if exemplos else 0
     meta_base = {"plataforma": plataforma, "estilo": estilo, "fonte": "gemini", "few_shot": n_exemplos}
+    meta_p1 = {**meta_base, "parte": "1", "duracao": "10s"}
+    meta_p2 = {**meta_base, "parte": "2", "duracao": "10s"}
+    if err_p1:
+        meta_p1["erro"] = err_p1
+    if err_p2:
+        meta_p2["erro"] = err_p2
     return [
         PromptCriativo(
             produto_id=produto.id, produto_nome=produto.nome,
             nicho=produto.nicho, preco=produto.preco, gancho=produto.gancho,
             tipo=f"video_{plataforma}_parte1", prompt_texto=texto_p1,
-            metadados={**meta_base, "parte": "1", "duracao": "10s"},
+            metadados=meta_p1,
         ),
         PromptCriativo(
             produto_id=produto.id, produto_nome=produto.nome,
             nicho=produto.nicho, preco=produto.preco, gancho=produto.gancho,
             tipo=f"video_{plataforma}_parte2", prompt_texto=texto_p2,
-            metadados={**meta_base, "parte": "2", "duracao": "10s"},
+            metadados=meta_p2,
         ),
     ]
 
@@ -252,17 +276,17 @@ O podcast deve:
 Tom: conversa entre dois amigos descobrindo juntos. Informal, sem ser vendedor agressivo.
 O prompt deve ser AUTOCONTIDO."""
 
-    try:
-        texto = _chamar_gemini(_SYSTEM_PODCAST, user, temperature=0.8)
-    except Exception as exc:
-        logger.error("Gemini falhou: %s", exc)
-        texto = f"[ERRO GEMINI] Gere podcast sobre {produto.nome}."
+    texto, err = _gerar_com_fallback(
+        lambda: _chamar_gemini(_SYSTEM_PODCAST, user, temperature=0.8),
+        f"[ERRO GEMINI] Gere podcast sobre {produto.nome}.",
+        rotulo="Podcast",
+    )
 
     return PromptCriativo(
         produto_id=produto.id, produto_nome=produto.nome,
         nicho=produto.nicho, preco=produto.preco, gancho=produto.gancho,
         tipo="podcast", prompt_texto=texto,
-        metadados={"duracao_alvo": "2-3min", "fonte": "gemini"},
+        metadados={"duracao_alvo": "2-3min", "fonte": "gemini", **({"erro": err} if err else {})},
     )
 
 
@@ -288,17 +312,17 @@ Slides obrigatórios:
 Design: 1080×1080 ou 1080×1350. Fundo escuro, texto branco/amarelo, fonte bold sem serifa.
 O prompt deve ser AUTOCONTIDO."""
 
-    try:
-        texto = _chamar_gemini(_SYSTEM_CARROSSEL, user, temperature=0.8)
-    except Exception as exc:
-        logger.error("Gemini falhou: %s", exc)
-        texto = f"[ERRO GEMINI] Gere carrossel sobre {produto.nome}."
+    texto, err = _gerar_com_fallback(
+        lambda: _chamar_gemini(_SYSTEM_CARROSSEL, user, temperature=0.8),
+        f"[ERRO GEMINI] Gere carrossel sobre {produto.nome}.",
+        rotulo="Carrossel",
+    )
 
     return PromptCriativo(
         produto_id=produto.id, produto_nome=produto.nome,
         nicho=produto.nicho, preco=produto.preco, gancho=produto.gancho,
         tipo="carrossel", prompt_texto=texto,
-        metadados={"formato": "1080x1080 ou 1080x1350", "fonte": "gemini"},
+        metadados={"formato": "1080x1080 ou 1080x1350", "fonte": "gemini", **({"erro": err} if err else {})},
     )
 
 
