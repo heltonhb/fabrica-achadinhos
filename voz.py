@@ -9,11 +9,42 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import edge_tts
 
 from config import VOZ_PADRAO, VOZ_RATE
+
+
+def duracao_ffprobe(path: Path) -> float:
+    """Duração em segundos via ffprobe; RuntimeError claro se falhar."""
+    if not path.exists():
+        raise RuntimeError(f"Arquivo de áudio não encontrado: {path}")
+    if shutil.which("ffprobe") is None:
+        raise RuntimeError(
+            "ffprobe não encontrado no PATH. Instale o FFmpeg "
+            "(ex: sudo apt install ffmpeg) e tente novamente."
+        )
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"ffprobe expirou ao medir {path.name}") from exc
+    out = (r.stdout or "").strip()
+    if r.returncode != 0 or not out:
+        detalhe = (r.stderr or "").strip() or f"código {r.returncode}"
+        raise RuntimeError(f"ffprobe falhou em {path.name}: {detalhe}")
+    try:
+        return float(out)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Duração inválida do ffprobe para {path.name}: {out!r}"
+        ) from exc
 
 
 async def _gerar_async(texto: str, mp3_path: Path, voz: str, rate: str) -> list[dict]:
@@ -40,15 +71,7 @@ def gerar_voz(texto: str, pasta: Path, voz: str = VOZ_PADRAO, rate: str = VOZ_RA
     pasta.mkdir(parents=True, exist_ok=True)
     mp3 = pasta / "locucao.mp3"
     palavras = asyncio.run(_gerar_async(texto, mp3, voz, rate))
-
-    import subprocess
-    dur = float(
-        subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "csv=p=0", str(mp3)],
-            capture_output=True, text=True,
-        ).stdout.strip()
-    )
+    dur = duracao_ffprobe(mp3)
 
     (pasta / "palavras.json").write_text(
         json.dumps(palavras, ensure_ascii=False, indent=1), encoding="utf-8"

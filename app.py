@@ -7,8 +7,12 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
+import time
+from concurrent.futures import Future
 from dataclasses import replace as dc_replace
 from pathlib import Path
+from typing import Any, Callable
 
 import streamlit as st
 
@@ -16,6 +20,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sheets import Produto, ler_produtos, salvar_produtos, _get_sheets_service
+from config import ESTADOS
 from prompts import (
     gerar_prompt_video,
     gerar_prompt_podcast,
@@ -24,7 +29,7 @@ from prompts import (
     ESTILOS,
 )
 from roteirista import gerar_ganchos
-from midia import resumo_midia, gerar_links_busca, criar_pasta_midia, MIDIAS_DIR, _slugificar
+from midia import resumo_midia, gerar_links_busca, criar_pasta_midia, MIDIAS_DIR
 from scraping import extrair_de_url, baixar_todas_midias, baixar_urls_manuais
 from legenda import gerar_legenda, gerar_todas_legendas
 
@@ -39,24 +44,149 @@ st.title("🎯 Fábrica de Achadinhos")
 st.caption("Gerencie produtos e gere prompts para criativos (Reels / TikTok / Podcast / Carrossel)")
 
 # ─── Estado da sessão ────────────────────────────────────────────────────────
+SECOES = [
+    "📋 Produtos",
+    "➕ Novo Produto",
+    "🎬 Mídia",
+    "🎥 Render",
+    "📝 Legenda",
+    "🤖 Gerar Prompt",
+]
 if "produtos" not in st.session_state:
     st.session_state.produtos = []
-if "indice_editando" not in st.session_state:
-    st.session_state.indice_editando = None
+if "secao" not in st.session_state:
+    st.session_state.secao = SECOES[0]
 if "opcoes_gancho" not in st.session_state:
     st.session_state.opcoes_gancho = []
 if "gancho_selecionado" not in st.session_state:
     st.session_state.gancho_selecionado = ""
 if "produto_id_prompt" not in st.session_state:
-    # rastreia qual produto está ativo na tab Gerar Prompt
+    # rastreia qual produto está ativo na seção Gerar Prompt
     st.session_state.produto_id_prompt = None
+if "params_geracao" not in st.session_state:
+    # parâmetros da última geração de prompt (para "Regerar este")
+    st.session_state.params_geracao = None
+for _job_key in (
+    "job_prompt",
+    "job_prompt_params",
+    "job_gancho",
+    "job_gancho_pid",
+    "job_legenda",
+    "job_legenda_pid",
+):
+    if _job_key not in st.session_state:
+        st.session_state[_job_key] = None
 
 
 def _limpar_estado_prompt() -> None:
-    """Zera todos os estados ligados à tab Gerar Prompt."""
+    """Zera todos os estados ligados à seção Gerar Prompt."""
     st.session_state.opcoes_gancho = []
     st.session_state.gancho_selecionado = ""
     st.session_state.prompt_gerado = None
+    st.session_state.params_geracao = None
+    st.session_state.job_prompt = None
+    st.session_state.job_prompt_params = None
+    st.session_state.job_gancho = None
+    st.session_state.job_gancho_pid = None
+
+
+def _abrir_prompt_do_produto(produto_id: str) -> None:
+    """Seleciona o produto na seção Gerar Prompt e navega até lá."""
+    invertidos = list(reversed(st.session_state.produtos))
+    try:
+        idx = next(i for i, p in enumerate(invertidos) if p.id == produto_id)
+    except StopIteration:
+        idx = 0
+    # o selectbox da seção usa a lista invertida e a chave sel_prompt
+    st.session_state.sel_prompt = idx
+    st.session_state.produto_id_prompt = None  # força reset de estado no próximo run
+    _limpar_estado_prompt()
+    st.session_state.secao = "🤖 Gerar Prompt"
+    st.rerun()
+
+
+def _gerar_prompts_salvos(params: dict) -> list:
+    """(Re)gera prompts a partir dos parâmetros salvos em session_state."""
+    p = params["produto"]
+    tipo = params["tipo"]
+    estilo = params["estilo"]
+    if tipo in ("reels", "tiktok"):
+        return gerar_prompt_video(
+            p, tipo, estilo,
+            uso_inusitado=params.get("uso_inusitado"),
+            estrategia_parte2=params.get("estrategia", "plot_twist"),
+        )
+    if tipo == "podcast":
+        return [gerar_prompt_podcast(p)]
+    return [gerar_prompt_carrossel(p)]
+
+
+# ─── Jobs em background (sobrevivem a troca de seção) ─────────────────────────
+def _iniciar_job(chave: str, fn: Callable[[], Any], produto_id: str = "") -> None:
+    """Roda ``fn`` em thread daemon. O Streamlit cancela o run atual ao trocar
+    de seção; a thread continua e o resultado é coletado no próximo run."""
+    fut: Future = Future()
+    st.session_state[f"job_{chave}"] = fut
+    if chave == "gancho":
+        st.session_state.job_gancho_pid = produto_id
+    elif chave == "legenda":
+        st.session_state.job_legenda_pid = produto_id
+
+    def _run() -> None:
+        try:
+            fut.set_result(fn())
+        except Exception as exc:  # noqa: BLE001
+            try:
+                if not fut.cancelled():
+                    fut.set_exception(exc)
+            except Exception:  # noqa: BLE001
+                pass
+
+    threading.Thread(target=_run, daemon=True, name=f"job-{chave}").start()
+
+
+def _job_ativo(chave: str) -> bool:
+    fut = st.session_state.get(f"job_{chave}")
+    return fut is not None and not fut.done()
+
+
+def _coletar_job(chave: str, produto_id: str = "") -> Any:
+    """None = sem job · 'running' = em andamento · Exception · resultado."""
+    fut = st.session_state.get(f"job_{chave}")
+    if fut is None:
+        return None
+
+    pid_key = f"job_{chave}_pid"
+    if chave == "prompt":
+        params = st.session_state.get("job_prompt_params") or {}
+        prod = params.get("produto")
+        pid = prod.id if prod is not None else ""
+    else:
+        pid = st.session_state.get(pid_key) or ""
+
+    if produto_id and pid and pid != produto_id:
+        # job de outro produto — descarta
+        st.session_state[f"job_{chave}"] = None
+        if chave == "prompt":
+            st.session_state.job_prompt_params = None
+        else:
+            st.session_state[pid_key] = None
+        return None
+
+    if not fut.done():
+        return "running"
+
+    st.session_state[f"job_{chave}"] = None
+    if fut.cancelled():
+        return None
+    exc = fut.exception()
+    if exc is not None:
+        return exc
+    resultado = fut.result()
+    if chave == "prompt":
+        st.session_state.prompt_gerado = resultado
+        st.session_state.params_geracao = st.session_state.get("job_prompt_params")
+    return resultado
 
 
 def recarregar():
@@ -82,19 +212,24 @@ with st.sidebar:
     1. Recarregue para ler a planilha
     2. Clique num produto para ver/gerar prompts
     3. Copie o prompt e cole no Google Vids ou NotebookLM
+    4. Em **🎥 Render**, gere o vídeo final (requer ffmpeg)
     """)
 
 # ─── Carrega dados na primeira vez ────────────────────────────────────────────
 if not st.session_state.produtos:
     recarregar()
 
-# ─── Abas principais ─────────────────────────────────────────────────────────
-tab_lista, tab_novo, tab_midia, tab_legenda, tab_prompt = st.tabs([
-    "📋 Produtos", "➕ Novo Produto", "🎬 Mídia", "📝 Legenda", "🤖 Gerar Prompt"
-])
+# ─── Navegação principal ─────────────────────────────────────────────────────
+secao = st.radio(
+    "Seção",
+    SECOES,
+    horizontal=True,
+    key="secao",
+    label_visibility="collapsed",
+)
 
-# ─── TAB: Lista de Produtos ──────────────────────────────────────────────────
-with tab_lista:
+# ─── SEÇÃO: Lista de Produtos ───────────────────────────────────────────────
+if secao == "📋 Produtos":
     if not st.session_state.produtos:
         st.info("Nenhum produto encontrado. Clique em 'Recarregar planilha' ou adicione um novo.")
     else:
@@ -130,11 +265,30 @@ with tab_lista:
                     else:
                         st.warning("⏳ Prompt pendente")
 
+                # edição de status (fonte única: planilha via salvar_produtos)
+                st.markdown("**Status:**")
+                status_idx = ESTADOS.index(p.status) if p.status in ESTADOS else 0
+                novo_status = st.selectbox(
+                    "Status do fluxo",
+                    ESTADOS,
+                    index=status_idx,
+                    key=f"status_{p.id}_{i}",
+                    label_visibility="collapsed",
+                )
+                if novo_status != p.status:
+                    anterior = p.status
+                    p.status = novo_status
+                    try:
+                        salvar_produtos(st.session_state.produtos)
+                        st.success(f"Status → **{novo_status}**")
+                    except Exception as exc:
+                        p.status = anterior
+                        st.error(f"Falha ao salvar status: {exc}")
+
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button(f"🎬 Gerar prompt", key=f"btn_prompt_{i}", use_container_width=True):
-                        st.session_state.indice_editando = i
-                        st.rerun()
+                        _abrir_prompt_do_produto(p.id)
                 with col_btn2:
                     if st.button(f"🗑️ Deletar", key=f"btn_del_{i}", use_container_width=True, type="secondary"):
                         st.session_state.confirmar_delete = i
@@ -148,8 +302,13 @@ with tab_lista:
             col_sim, col_nao = st.columns(2)
             with col_sim:
                 if st.button("✅ Sim, deletar", type="primary", use_container_width=True):
-                    st.session_state.produtos.pop(idx)
-                    salvar_produtos(st.session_state.produtos)
+                    removido = st.session_state.produtos.pop(idx)
+                    try:
+                        salvar_produtos(st.session_state.produtos)
+                    except Exception as exc:
+                        st.session_state.produtos.insert(idx, removido)
+                        st.error(f"Falha ao salvar: {exc}")
+                        st.stop()
                     st.session_state.confirmar_delete = None
                     st.success(f"🗑️ Produto {p.id} deletado!")
                     st.rerun()
@@ -158,8 +317,8 @@ with tab_lista:
                     st.session_state.confirmar_delete = None
                     st.rerun()
 
-# ─── TAB: Novo Produto ───────────────────────────────────────────────────────
-with tab_novo:
+# ─── SEÇÃO: Novo Produto ─────────────────────────────────────────────────────
+if secao == "➕ Novo Produto":
     st.subheader("Adicionar novo produto à planilha")
 
     with st.form("novo_produto"):
@@ -179,9 +338,11 @@ with tab_novo:
         if submitted:
             if not novo_id or not novo_nome:
                 st.error("Preencha pelo menos ID e Nome do Produto.")
+            elif any((x.id or "").strip() == novo_id.strip() for x in st.session_state.produtos):
+                st.error(f"ID já existe na lista: {novo_id}")
             else:
                 novo = Produto(
-                    id=novo_id,
+                    id=novo_id.strip(),
                     nome=novo_nome,
                     nicho=novo_nicho,
                     preco=novo_preco,
@@ -191,12 +352,17 @@ with tab_novo:
                     gancho=novo_gancho,
                 )
                 st.session_state.produtos.append(novo)
-                salvar_produtos(st.session_state.produtos)
-                st.success(f"✅ Produto {novo_id} adicionado! (salvo localmente)")
-                st.rerun()
+                try:
+                    salvar_produtos(st.session_state.produtos)
+                except Exception as exc:
+                    st.session_state.produtos.pop()
+                    st.error(f"Falha ao salvar: {exc}")
+                else:
+                    st.success(f"✅ Produto {novo_id} adicionado!")
+                    st.rerun()
 
-# ─── TAB: Mídia (B-Roll de Fornecedores) ────────────────────────────────────
-with tab_midia:
+# ─── SEÇÃO: Mídia (B-Roll de Fornecedores) ──────────────────────────────────
+if secao == "🎬 Mídia":
     st.subheader("🎬 Mineração e Extração de Mídia")
 
     if not st.session_state.produtos:
@@ -206,8 +372,7 @@ with tab_midia:
         st.markdown("#### Visão Geral")
         cols = st.columns(len(st.session_state.produtos))
         for i, p in enumerate(st.session_state.produtos):
-            slug = p.id.replace("#", "") + "_" + _slugificar(p.nome)
-            r = resumo_midia(slug)
+            r = resumo_midia(p.slug)
             with cols[i]:
                 if r["pronto"]:
                     st.success(f"**{p.id}** ✅")
@@ -225,7 +390,7 @@ with tab_midia:
         opcoes = [f"{p.id} — {p.nome}" for p in st.session_state.produtos]
         idx = st.selectbox("Selecione o produto:", range(len(opcoes)), format_func=lambda i: opcoes[i], key="sel_midia")
         p = st.session_state.produtos[idx]
-        slug = p.id.replace("#", "") + "_" + _slugificar(p.nome)
+        slug = p.slug
 
         c1, c2 = st.columns([1, 1])
 
@@ -357,8 +522,135 @@ with tab_midia:
             - 5 clipes para ~20s de vídeo
             """)
 
-# ─── TAB: Legenda Instagram ──────────────────────────────────────────────────
-with tab_legenda:
+# ─── SEÇÃO: Render (pipeline) ────────────────────────────────────────────────
+if secao == "🎥 Render":
+    st.subheader("🎥 Render — gancho → roteiro → voz → vídeo final")
+
+    if not st.session_state.produtos:
+        st.info("Carregue a planilha primeiro (sidebar → Recarregar)")
+    else:
+        opcoes = [f"{p.id} — {p.nome}" for p in st.session_state.produtos]
+        idx = st.selectbox(
+            "Produto:", range(len(opcoes)), format_func=lambda i: opcoes[i],
+            key="sel_render",
+        )
+        p = st.session_state.produtos[idx]
+
+        r = resumo_midia(p.slug)
+        clipes = p.clipes()
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown(f"**Status atual:** {p.status}")
+            st.markdown(f"**Pasta:** `{p.slug}`")
+        with c2:
+            st.markdown(f"**Clipes:** {len(clipes)}")
+            if r["pronto"]:
+                st.success("Mídia pronta ✅")
+            elif r["existe_pasta"]:
+                st.warning("Mídia incompleta ⚠️")
+            else:
+                st.error("Sem mídia ❌")
+        with c3:
+            st.markdown(f"**Estilo de roteiro:**")
+            estilo_render = st.selectbox(
+                "Estilo",
+                list(ESTILOS.keys()),
+                format_func=lambda k: ESTILOS[k]["label"],
+                key="estilo_render",
+                label_visibility="collapsed",
+            )
+
+        st.divider()
+
+        col_opt1, col_opt2 = st.columns(2)
+        with col_opt1:
+            forcar = st.checkbox(
+                "Forçar regeneração (ignora arquivos já gerados)",
+                key="render_forcar",
+            )
+        with col_opt2:
+            usar_ganchos = st.checkbox(
+                "Gerar 3 ganchos com Gemini (senão usa o da planilha)",
+                value=True,
+                key="render_ganchos",
+            )
+
+        if st.button("🚀 Processar / Renderizar", type="primary", use_container_width=True):
+            # import lazy: pipeline puxa ffmpeg/render só quando necessário
+            from pipeline import processar_produto
+
+            with st.spinner(f"Processando {p.id} — isto pode demorar (render)..."):
+                try:
+                    res = processar_produto(
+                        p,
+                        forcar=forcar,
+                        estilo=estilo_render,
+                        usar_ganchos=usar_ganchos,
+                    )
+                except Exception as exc:
+                    st.session_state.ultimo_render = {
+                        "id": p.id, "ok": False, "erro": str(exc), "log": [],
+                    }
+                    st.error(f"Falha no pipeline: {exc}")
+                else:
+                    res["id"] = p.id
+                    st.session_state.ultimo_render = res
+                    # persiste status ("Editado") e dados na planilha
+                    try:
+                        salvar_produtos(st.session_state.produtos)
+                    except Exception as exc:
+                        st.warning(f"Render ok, mas falhou ao salvar na planilha: {exc}")
+                    st.rerun()
+
+        # resultado do último render
+        ultimo = st.session_state.get("ultimo_render")
+        if ultimo:
+            st.divider()
+            st.markdown(f"#### Resultado — `{ultimo.get('id', '?')}`")
+            if ultimo.get("ok"):
+                st.success("✅ Render concluído")
+            elif ultimo.get("motivo") == "sem_clipes":
+                st.warning("⊘ Aguardando clipes — adicione vídeos em `Midias/`")
+            else:
+                st.error(f"✗ Erro: {ultimo.get('erro', 'desconhecido')}")
+
+            for linha in ultimo.get("log", []):
+                st.caption(f"• {linha}")
+
+            video_path = ultimo.get("video")
+            if video_path and Path(video_path).exists():
+                st.video(video_path)
+                st.download_button(
+                    "📥 Baixar vídeo (.mp4)",
+                    data=Path(video_path).read_bytes(),
+                    file_name=Path(video_path).name,
+                    mime="video/mp4",
+                    use_container_width=True,
+                )
+
+            pacote_path = ultimo.get("pacote")
+            if pacote_path and Path(pacote_path).exists():
+                st.download_button(
+                    "📥 Baixar pacote de post (.txt)",
+                    data=Path(pacote_path).read_text(encoding="utf-8"),
+                    file_name=Path(pacote_path).name,
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+
+        with st.expander("ℹ️ O que o pipeline faz"):
+            st.markdown("""
+            1. **Gancho** — 3 opções via Gemini (ou o da planilha)
+            2. **Roteiro** — JSON 20s adaptado ao estilo e aos clipes reais
+            3. **Voz** — edge-tts + timings por palavra
+            4. **Visual** — badge, CTA e legendas karaoke
+            5. **Trilha** — áudio sintetizado na duração certa
+            6. **Render** — ffmpeg → `renders/` + `pacote_post.txt`
+            """)
+
+# ─── SEÇÃO: Legenda Instagram ────────────────────────────────────────────────
+if secao == "📝 Legenda":
     st.subheader("📝 Gerador de Legendas para Instagram")
 
     if not st.session_state.produtos:
@@ -385,9 +677,31 @@ with tab_legenda:
             "📱 Stories": "stories",
         }
 
-        if st.button("⚡ Gerar Legenda", use_container_width=True, type="primary"):
-            leg = gerar_legenda(p, mapa_estilo[estilo])
-            st.session_state.legenda_gerada = leg
+        # coleta job de legenda (ex.: voltou de outra seção)
+        r_leg = _coletar_job("legenda", p.id)
+        if isinstance(r_leg, Exception):
+            st.error(f"Falha ao gerar legenda: {r_leg}")
+        elif r_leg is not None:
+            st.session_state.legenda_gerada = r_leg
+
+        legenda_rodando = _job_ativo("legenda")
+        if st.button(
+            "⚡ Gerar Legenda",
+            use_container_width=True,
+            type="primary",
+            disabled=legenda_rodando,
+        ):
+            estilo_sel = mapa_estilo[estilo]
+            _iniciar_job("legenda", lambda: gerar_legenda(p, estilo_sel), p.id)
+            st.rerun()
+
+        if legenda_rodando:
+            st.info(
+                "⏳ Gerando legenda em segundo plano — pode mudar de seção "
+                "e voltar depois."
+            )
+            time.sleep(0.5)
+            st.rerun()
 
         # exibe a legenda gerada
         if "legenda_gerada" in st.session_state and st.session_state.legenda_gerada:
@@ -414,7 +728,7 @@ with tab_legenda:
                 st.code(leg.comentario_fixo, language=None)
 
             # botões de ação
-            col_a, col_b, col_c = st.columns(3)
+            col_a, col_b = st.columns(2)
             with col_a:
                 st.download_button(
                     "📥 Baixar legenda (.txt)",
@@ -426,14 +740,13 @@ with tab_legenda:
             with col_b:
                 st.download_button(
                     "📥 Baixar comentário (.txt)",
-                    data=leg.comentario_fixo,
+                    data=leg.comentario_fixo or "",
                     file_name=f"comentario_{p.id}.txt",
                     mime="text/plain",
                     use_container_width=True,
+                    disabled=not leg.comentario_fixo,
                 )
-            with col_c:
-                if st.button("📋 Copiar tudo", use_container_width=True):
-                    st.write("Copiado! Cole direto no Instagram.")
+            st.caption("💡 Use o ícone de cópia no canto superior direito de cada bloco `st.code` para copiar.")
 
             # preview de todos os estilos
             with st.expander("👀 Ver todos os estilos", expanded=False):
@@ -445,8 +758,8 @@ with tab_legenda:
                         st.caption(f"💬 Comentário: {l.comentario_fixo}")
                     st.divider()
 
-# ─── TAB: Gerar Prompt ───────────────────────────────────────────────────────
-with tab_prompt:
+# ─── SEÇÃO: Gerar Prompt ─────────────────────────────────────────────────────
+if secao == "🤖 Gerar Prompt":
     st.subheader("Gerar prompt para criativo")
 
     if not st.session_state.produtos:
@@ -469,6 +782,20 @@ with tab_prompt:
             st.session_state.produto_id_prompt = p.id
             _limpar_estado_prompt()
             st.rerun()
+
+        # ── Coleta jobs que terminaram (ex.: usuário voltou de outra seção) ──
+        r_gancho = _coletar_job("gancho", p.id)
+        if isinstance(r_gancho, Exception):
+            st.error(f"Não foi possível gerar ganchos: {r_gancho}")
+        elif r_gancho is not None:
+            if r_gancho:
+                st.session_state.opcoes_gancho = r_gancho
+            else:
+                st.error("Não foi possível gerar ganchos. Verifique a GEMINI_API_KEY.")
+
+        r_prompt = _coletar_job("prompt", p.id)
+        if isinstance(r_prompt, Exception):
+            st.error(f"Falha ao gerar prompt: {r_prompt}")
 
         # info do produto
         with st.expander("📝 Detalhes do produto", expanded=False):
@@ -502,15 +829,16 @@ with tab_prompt:
             )
         with col_btn_gancho:
             st.markdown("<br>", unsafe_allow_html=True)
-            gerar_btn = st.button("🎲 Sugerir 3 ganchos", use_container_width=True)
+            gerar_btn = st.button(
+                "🎲 Sugerir 3 ganchos",
+                use_container_width=True,
+                disabled=_job_ativo("gancho"),
+            )
 
         if gerar_btn:
-            with st.spinner("Gemini gerando opções de gancho..."):
-                opcoes_gancho = gerar_ganchos(p)
-            if opcoes_gancho:
-                st.session_state.opcoes_gancho = opcoes_gancho
-            else:
-                st.error("Não foi possível gerar ganchos. Verifique a GEMINI_API_KEY.")
+            st.session_state.opcoes_gancho = []
+            _iniciar_job("gancho", lambda: gerar_ganchos(p), p.id)
+            st.rerun()
 
         # exibe as opções de gancho
         if st.session_state.opcoes_gancho:
@@ -607,23 +935,25 @@ with tab_prompt:
         # ── PASSO 3: Gerar ────────────────────────────────────────────────────
         st.markdown("### 3️⃣ Gerar")
 
-        if st.button("⚡ Gerar Prompt", use_container_width=True, type="primary"):
+        prompt_rodando = _job_ativo("prompt")
+        if st.button(
+            "⚡ Gerar Prompt",
+            use_container_width=True,
+            type="primary",
+            disabled=prompt_rodando,
+        ):
             tipo = mapa_tipo[tipo_criativo]
+            params = {
+                "produto": p_para_gerar,
+                "tipo": tipo,
+                "estilo": estilo_sel,
+                "uso_inusitado": uso_inusitado_val,
+                "estrategia": estrategia_val,
+            }
             st.session_state.prompt_gerado = None
-
-            with st.spinner("Gemini gerando prompt..."):
-                if tipo in ("reels", "tiktok"):
-                    resultado = gerar_prompt_video(
-                        p_para_gerar, tipo, estilo_sel,
-                        uso_inusitado=uso_inusitado_val,
-                        estrategia_parte2=estrategia_val,
-                    )
-                elif tipo == "podcast":
-                    resultado = [gerar_prompt_podcast(p_para_gerar)]
-                else:
-                    resultado = [gerar_prompt_carrossel(p_para_gerar)]
-
-            st.session_state.prompt_gerado = resultado
+            st.session_state.params_geracao = params
+            st.session_state.job_prompt_params = params
+            _iniciar_job("prompt", lambda: _gerar_prompts_salvos(params), p.id)
             st.rerun()
 
         # exibe os prompts gerados
@@ -639,6 +969,20 @@ with tab_prompt:
                     st.warning("🎬 **PARTE 2** — Plot Twist + CTA (10–20s)")
                 else:
                     st.success(f"✅ **{prompt.tipo.upper()}**")
+
+                # erro real da API (o texto do prompt abaixo é só placeholder)
+                erro_api = prompt.metadados.get("erro")
+                if erro_api:
+                    if "429" in erro_api or "RESOURCE_EXHAUSTED" in erro_api:
+                        dica = "Cota free-tier esgotada (limite de ~20 req/modelo). Aguarde alguns minutos e clique em 🔄 Regerar."
+                    elif "503" in erro_api or "UNAVAILABLE" in erro_api:
+                        dica = "Modelo instável (503 alta demanda). Clique em 🔄 Regerar em instantes."
+                    else:
+                        dica = "Clique em 🔄 Regerar para tentar de novo."
+                    st.error(
+                        "⚠️ **Gemini falhou ao gerar este prompt** — o texto abaixo é apenas um placeholder.\n\n"
+                        f"`{erro_api[:400]}`\n\n{dica}"
+                    )
 
                 estilo_meta = prompt.metadados.get("estilo", "")
                 if estilo_meta and estilo_meta in ESTILOS:
@@ -678,10 +1022,26 @@ with tab_prompt:
                         "🔄 Regerar este",
                         use_container_width=True,
                         key=f"regen_{p.id}_{prompt.tipo}",
+                        disabled=_job_ativo("prompt"),
                     ):
-                        st.session_state.prompt_gerado = None
-                        st.rerun()
+                        params = st.session_state.get("params_geracao")
+                        if not params:
+                            st.error("Sem parâmetros da última geração — clique em ⚡ Gerar Prompt de novo.")
+                        else:
+                            st.session_state.prompt_gerado = None
+                            st.session_state.job_prompt_params = params
+                            _iniciar_job("prompt", lambda: _gerar_prompts_salvos(params), p.id)
+                            st.rerun()
 
             if len(prompts) > 1:
                 with st.expander("🔧 Metadados"):
                     st.json(prompts[0].to_json())
+
+        # status do job em background — pode trocar de seção e voltar depois
+        if _job_ativo("gancho") or _job_ativo("prompt"):
+            st.info(
+                "⏳ Processamento em segundo plano — pode mudar de seção; "
+                "quando voltar aqui, o resultado aparece."
+            )
+            time.sleep(0.5)
+            st.rerun()

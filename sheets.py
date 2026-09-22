@@ -1,23 +1,32 @@
 """
-sheets.py — Integração com Google Sheets como fonte de dados.
+sheets.py — Porta única de leitura/escrita de produtos.
 
-Leitura via export CSV público.
-Escrita via Google Sheets API (service account).
-Configure SERVICE_ACCOUNT_JSON no .env com o caminho para o arquivo
-de credenciais baixado do Google Cloud Console.
+App, pipeline e webhook devem importar `ler_produtos` / `salvar_produtos`
+daqui (não de config.py). Leitura: Google Sheets via export CSV público,
+com fallback para o CSV local. Escrita: CSV local + sync por linha na
+Google Sheets API (sem limpar a aba inteira).
 """
 
 from __future__ import annotations
 
 import csv
 import io
-import json
 import logging
 from pathlib import Path
 
 import requests
 
-from config import BASE_DIR, COLUNAS, Produto, carregar_env
+from config import (
+    BASE_DIR,
+    COLUNAS,
+    CSV_PATH,
+    Produto,
+    carregar_env,
+    ler_csv_local,
+    produto_de_linha,
+    salvar_csv_local,
+    validar_ids_unicos,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,126 +101,181 @@ def _get_sheets_service():
 
 
 def ler_produtos() -> list[Produto]:
-    """Lê a planilha Google Sheets via export CSV público."""
+    """Lê a planilha Google Sheets via export CSV público; fallback: CSV local."""
     try:
         resp = requests.get(_EXPORT_URL, timeout=15)
         resp.raise_for_status()
         texto = resp.text
     except Exception as exc:
         logger.warning("Falha ao ler Google Sheets: %s — usando CSV local", exc)
-        return _ler_csv_local()
+        return ler_csv_local(CSV_PATH)
 
-    reader = csv.DictReader(io.StringIO(texto))
     prods = []
-    for linha in reader:
-        p = Produto(
-            id=(linha.get("ID") or "").strip(),
-            status=(linha.get("Status") or "Ideia").strip(),
-            data_postagem=(linha.get("Data Postagem") or "").strip(),
-            nome=(linha.get("Nome do Produto") or "").strip(),
-            nicho=(linha.get("Nicho") or "").strip(),
-            preco=(linha.get("Preco Medio (R$)") or "").strip(),
-            comissao=(linha.get("Comissao Est (R$)") or "").strip(),
-            link_afiliado=(linha.get("Link Afiliado Shopee") or "").strip(),
-            link_vitrine=(linha.get("Link Vitrine (Bio)") or "").strip(),
-            pasta_midias=(linha.get("Pasta Midias") or "").strip(),
-            gancho=(linha.get("Roteiro / Gancho") or "").strip(),
-            post_agendado=(linha.get("Post Agendado") or "Nao").strip(),
-            prompt_criativo=(linha.get("Prompt Criativo") or "").strip(),
-            observacoes=(linha.get("Observacoes") or "").strip(),
-            media_id_instagram=(linha.get("Media ID Instagram") or "").strip(),
-            comentarios_quero=(linha.get("Comentarios QUERO") or "").strip(),
-            alcance=(linha.get("Alcance") or "").strip(),
-            salvamentos=(linha.get("Salvamentos") or "").strip(),
-            nota_manual=(linha.get("Nota Manual") or "").strip(),
-        )
-        if p.id:
-            prods.append(p)
+    vistos: set[str] = set()
+    for linha in csv.DictReader(io.StringIO(texto)):
+        p = produto_de_linha(linha)
+        if not p:
+            continue
+        if p.id in vistos:
+            logger.warning("ID duplicado ignorado na leitura: %s", p.id)
+            continue
+        vistos.add(p.id)
+        prods.append(p)
     logger.info("Lidos %d produtos da Google Sheets", len(prods))
     return prods
 
 
 def salvar_produtos(prods: list[Produto]) -> None:
-    """Salva a lista de produtos no CSV local E sincroniza com Google Sheets."""
-    # 1. CSV local (backup sempre)
-    csv_path = BASE_DIR / "achados.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=COLUNAS)
-        w.writeheader()
-        for p in prods:
-            w.writerow(p.to_dict())
-    logger.info("Salvos %d produtos em %s", len(prods), csv_path)
-
-    # 2. Google Sheets (se autenticado)
+    """Valida IDs, grava CSV local e sincroniza por linha com o Google Sheets."""
+    validar_ids_unicos(prods)
+    salvar_csv_local(prods, CSV_PATH)
+    logger.info("Salvos %d produtos em %s", len(prods), CSV_PATH)
     _sincronizar_para_sheets(prods)
 
 
+def _linha_produto(p: Produto) -> list[str]:
+    d = p.to_dict()
+    return [d.get(col, "") for col in COLUNAS]
+
+
+def _ler_valores_sheets(service) -> list[list[str]]:
+    """Lê a aba atual via API (para mapear ID → número de linha)."""
+    resp = (
+        service.spreadsheets()
+        .values()
+        .get(spreadsheetId=SPREADSHEET_ID, range=f"'{SHEET_NAME}'")
+        .execute()
+    )
+    return resp.get("values") or []
+
+
+def _id_coluna(header: list[str]) -> int:
+    for i, h in enumerate(header):
+        if (h or "").strip() == "ID":
+            return i
+    return 0
+
+
+def _mapa_id_linha(valores: list[list[str]], id_col: int) -> dict[str, int]:
+    """Mapa ID → número de linha no Sheets (1-based; linha 1 = cabeçalho)."""
+    mapa: dict[str, int] = {}
+    for offset, row in enumerate(valores[1:], start=2):
+        if len(row) > id_col:
+            pid = (row[id_col] or "").strip()
+            if pid and pid not in mapa:
+                mapa[pid] = offset
+    return mapa
+
+
+def _sheet_id(service) -> int | None:
+    meta = (
+        service.spreadsheets()
+        .get(spreadsheetId=SPREADSHEET_ID, fields="sheets.properties")
+        .execute()
+    )
+    for s in meta.get("sheets", []):
+        props = s.get("properties", {})
+        if props.get("title") == SHEET_NAME:
+            return props.get("sheetId")
+    return None
+
+
 def _sincronizar_para_sheets(prods: list[Produto]) -> bool:
-    """Escreve todos os produtos na Google Sheets (substitui a aba inteira)."""
+    """Sync por linha: atualiza existentes, anexa novas, apaga removidas.
+
+    Nunca limpa a aba inteira antes de escrever (evita perder dados se a
+    chamada seguinte falhar).
+    """
     service = _get_sheets_service()
     if not service:
         logger.debug("Google Sheets API indisponível — skip sync")
         return False
 
     try:
-        # monta as linhas: header + dados
-        rows = [COLUNAS]
-        for p in prods:
-            d = p.to_dict()
-            rows.append([d.get(col, "") for col in COLUNAS])
+        valores = _ler_valores_sheets(service)
 
-        # limpa a aba e escreve de uma vez
-        range_name = f"'{SHEET_NAME}'!A1"
-        service.spreadsheets().values().clear(
-            spreadsheetId=SPREADSHEET_ID,
-            range=f"'{SHEET_NAME}'",
-            body={},
-        ).execute()
-        service.spreadsheets().values().update(
-            spreadsheetId=SPREADSHEET_ID,
-            range=range_name,
-            valueInputOption="RAW",
-            body={"values": rows},
-        ).execute()
-        logger.info("Sincronizados %d produtos na Google Sheets", len(prods))
+        # aba vazia → grava cabeçalho e sai (primeira escrita)
+        if not valores:
+            service.spreadsheets().values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f"'{SHEET_NAME}'!A1",
+                valueInputOption="RAW",
+                body={"values": [COLUNAS]},
+            ).execute()
+            valores = [COLUNAS]
+
+        header = valores[0]
+        id_col = _id_coluna(header)
+        id_para_linha = _mapa_id_linha(valores, id_col)
+        ids_novos = {p.id for p in prods}
+
+        # 1. atualiza linhas existentes (um batchUpdate só)
+        updates = []
+        for p in prods:
+            linha = id_para_linha.get(p.id)
+            if linha is not None:
+                updates.append(
+                    {
+                        "range": f"'{SHEET_NAME}'!A{linha}",
+                        "values": [_linha_produto(p)],
+                    }
+                )
+        if updates:
+            service.spreadsheets().values().batchUpdate(
+                spreadsheetId=SPREADSHEET_ID,
+                body={"valueInputOption": "RAW", "data": updates},
+            ).execute()
+
+        # 2. anexa produtos novos
+        anexos = [_linha_produto(p) for p in prods if p.id not in id_para_linha]
+        if anexos:
+            service.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f"'{SHEET_NAME}'",
+                valueInputOption="RAW",
+                insertDataOption="INSERT_ROWS",
+                body={"values": anexos},
+            ).execute()
+
+        # 3. apaga linhas removidas (de baixo para cima, sem deslocar índice)
+        remover = sorted(
+            (ln for pid, ln in id_para_linha.items() if pid not in ids_novos),
+            reverse=True,
+        )
+        if remover:
+            sid = _sheet_id(service)
+            if sid is None:
+                logger.warning("Aba '%s' não encontrada — remoções não aplicadas", SHEET_NAME)
+            else:
+                service.spreadsheets().batchUpdate(
+                    spreadsheetId=SPREADSHEET_ID,
+                    body={
+                        "requests": [
+                            {
+                                "deleteDimension": {
+                                    "range": {
+                                        "sheetId": sid,
+                                        "dimension": "ROWS",
+                                        "startIndex": ln - 1,  # 0-based
+                                        "endIndex": ln,
+                                    }
+                                }
+                            }
+                            for ln in remover
+                        ]
+                    },
+                ).execute()
+
+        logger.info(
+            "Sync Sheets: %d atualizados, %d anexados, %d removidos",
+            len(updates),
+            len(anexos),
+            len(remover),
+        )
         return True
     except Exception as exc:
         logger.error("Falha ao sincronizar Google Sheets: %s", exc)
         return False
-
-
-def _ler_csv_local() -> list[Produto]:
-    """Fallback: lê o CSV local."""
-    csv_path = BASE_DIR / "achados.csv"
-    if not csv_path.exists():
-        return []
-    prods = []
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        for linha in csv.DictReader(f):
-            p = Produto(
-                id=(linha.get("ID") or "").strip(),
-                status=(linha.get("Status") or "Ideia").strip(),
-                data_postagem=(linha.get("Data Postagem") or "").strip(),
-                nome=(linha.get("Nome do Produto") or "").strip(),
-                nicho=(linha.get("Nicho") or "").strip(),
-                preco=(linha.get("Preco Medio (R$)") or "").strip(),
-                comissao=(linha.get("Comissao Est (R$)") or "").strip(),
-                link_afiliado=(linha.get("Link Afiliado Shopee") or "").strip(),
-                link_vitrine=(linha.get("Link Vitrine (Bio)") or "").strip(),
-                pasta_midias=(linha.get("Pasta Midias") or "").strip(),
-                gancho=(linha.get("Roteiro / Gancho") or "").strip(),
-                post_agendado=(linha.get("Post Agendado") or "Nao").strip(),
-                prompt_criativo=(linha.get("Prompt Criativo") or "").strip(),
-                observacoes=(linha.get("Observacoes") or "").strip(),
-                media_id_instagram=(linha.get("Media ID Instagram") or "").strip(),
-                comentarios_quero=(linha.get("Comentarios QUERO") or "").strip(),
-                alcance=(linha.get("Alcance") or "").strip(),
-                salvamentos=(linha.get("Salvamentos") or "").strip(),
-                nota_manual=(linha.get("Nota Manual") or "").strip(),
-            )
-            if p.id:
-                prods.append(p)
-    return prods
 
 
 if __name__ == "__main__":

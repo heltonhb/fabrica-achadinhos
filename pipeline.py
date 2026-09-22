@@ -18,13 +18,13 @@ import logging
 from dataclasses import replace as dc_replace
 from pathlib import Path
 
-from config import Produto, ler_produtos, salvar_produtos
 from prompts import ESTILOS
 from render import renderizar
 from roteirista import gerar_ganchos, gerar_roteiro
+from sheets import Produto, ler_produtos, salvar_produtos
 from trilha import gerar_trilha
 from visual import gerar_badge, gerar_cta, gerar_legendas
-from voz import gerar_voz
+from voz import duracao_ffprobe, gerar_voz
 
 logger = logging.getLogger(__name__)
 
@@ -113,13 +113,19 @@ def processar_produto(
 
     if arq_roteiro.exists() and not forcar:
         roteiro = json.loads(arq_roteiro.read_text(encoding="utf-8"))
-        log.append("roteiro: reutilizado")
+        estilo_salvo = roteiro.get("_meta", {}).get("estilo", "?")
+        log.append(f"roteiro: reutilizado (estilo: {estilo_salvo})")
+        if estilo_salvo != estilo:
+            logger.warning(
+                "Roteiro de %s salvo com estilo '%s'; pedido '%s' — use --forcar para regenerar",
+                p.id, estilo_salvo, estilo,
+            )
     else:
         logger.info("Gerando roteiro para %s (estilo: %s)...", p.id, estilo)
-        roteiro = gerar_roteiro(p_roteiro)
+        roteiro = gerar_roteiro(p_roteiro, estilo=estilo)
         if not roteiro:
             raise RuntimeError(f"Gemini não gerou roteiro para {p.id}")
-        # registra estilo no roteiro para rastreabilidade
+        # estilo já vem em _meta via gerar_roteiro; garante merge seguro
         roteiro["_meta"] = {**roteiro.get("_meta", {}), "estilo": estilo}
         arq_roteiro.write_text(
             json.dumps(roteiro, ensure_ascii=False, indent=1), encoding="utf-8"
@@ -129,23 +135,39 @@ def processar_produto(
     p_roteiro.roteiro = roteiro
 
     # ── 3. Voz ───────────────────────────────────────────────────────────────
-    if not (pasta / "locucao.mp3").exists() or forcar:
+    mp3 = pasta / "locucao.mp3"
+    arq_palavras = pasta / "palavras.json"
+
+    if forcar or not mp3.exists():
         info = gerar_voz(roteiro["locucao"], pasta)
         log.append(f"voz: {info['duracao']:.1f}s, {len(info['palavras'])} palavras")
+    elif not arq_palavras.exists():
+        # mp3 antigo sem timings de palavra — regenera para destravar legendas
+        info = gerar_voz(roteiro["locucao"], pasta)
+        log.append(f"voz: regenerada (faltava palavras.json) — {info['duracao']:.1f}s")
     else:
-        import subprocess
-        dur = float(subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "csv=p=0", str(pasta / "locucao.mp3")],
-            capture_output=True, text=True,
-        ).stdout.strip())
-        info = {"duracao": dur}
+        info = {"duracao": duracao_ffprobe(mp3)}
         log.append("voz: reutilizada")
 
     # ── 4. Visual: badge + CTA + legendas karaoke ────────────────────────────
     gerar_badge(pasta, p.id)
     gerar_cta(pasta)
-    palavras = json.loads((pasta / "palavras.json").read_text(encoding="utf-8"))
+    if not arq_palavras.exists():
+        raise RuntimeError(
+            f"palavras.json ausente em {pasta} — a locução não tem timings de palavra. "
+            "Rode com --forcar para regenerar a voz."
+        )
+    try:
+        palavras = json.loads(arq_palavras.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"palavras.json inválido em {arq_palavras}: {exc}. "
+            "Rode com --forcar para regenerar a voz."
+        ) from exc
+    if not isinstance(palavras, list) or not palavras:
+        raise RuntimeError(
+            f"palavras.json vazio em {arq_palavras} — rode com --forcar para regenerar a voz."
+        )
     gerar_legendas(pasta, palavras)
     log.append("visual: badge + CTA + legendas OK")
 

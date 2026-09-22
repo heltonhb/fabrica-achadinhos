@@ -137,41 +137,62 @@ class Produto:
         return sorted(arqs, key=num)
 
 
-# ─── Planilha: leitura/escrita (CSV local; Sheets entra por esta mesma porta) ─
-def ler_produtos(csv_path: Path | None = None) -> list[Produto]:
-    """Lê a planilha base. Aceita CSV local; retorna lista de Produto."""
+# ─── Planilha: parse e CSV local (API pública fica em sheets.py) ────────────
+def produto_de_linha(linha: dict) -> Produto | None:
+    """Converte uma linha (CSV/Sheets) em Produto. Retorna None se sem ID."""
+    p = Produto(
+        id=(linha.get("ID") or "").strip(),
+        status=(linha.get("Status") or "Ideia").strip(),
+        data_postagem=(linha.get("Data Postagem") or "").strip(),
+        nome=(linha.get("Nome do Produto") or "").strip(),
+        nicho=(linha.get("Nicho") or "").strip(),
+        preco=(linha.get("Preco Medio (R$)") or "").strip(),
+        comissao=(linha.get("Comissao Est (R$)") or "").strip(),
+        link_afiliado=(linha.get("Link Afiliado Shopee") or "").strip(),
+        link_vitrine=(linha.get("Link Vitrine (Bio)") or "").strip(),
+        pasta_midias=(linha.get("Pasta Midias") or "").strip(),
+        gancho=(linha.get("Roteiro / Gancho") or "").strip(),
+        post_agendado=(linha.get("Post Agendado") or "Nao").strip(),
+        prompt_criativo=(linha.get("Prompt Criativo") or "").strip(),
+        observacoes=(linha.get("Observacoes") or "").strip(),
+        media_id_instagram=(linha.get("Media ID Instagram") or "").strip(),
+        comentarios_quero=(linha.get("Comentarios QUERO") or "").strip(),
+        alcance=(linha.get("Alcance") or "").strip(),
+        salvamentos=(linha.get("Salvamentos") or "").strip(),
+        nota_manual=(linha.get("Nota Manual") or "").strip(),
+    )
+    return p if p.id else None
+
+
+def validar_ids_unicos(prods: list[Produto]) -> None:
+    """Impede ID vazio ou duplicado antes de persistir."""
+    vistos: set[str] = set()
+    for p in prods:
+        pid = (p.id or "").strip()
+        if not pid:
+            raise ValueError("Produto sem ID não pode ser salvo.")
+        if pid in vistos:
+            raise ValueError(f"ID duplicado: {pid}")
+        vistos.add(pid)
+
+
+def ler_csv_local(csv_path: Path | None = None) -> list[Produto]:
+    """Lê o CSV local (fallback da porta única em sheets.py)."""
     path = csv_path or CSV_PATH
+    if not path.exists():
+        return []
     prods = []
     with open(path, newline="", encoding="utf-8") as f:
         for linha in csv.DictReader(f):
-            p = Produto(
-                id=(linha.get("ID") or "").strip(),
-                status=(linha.get("Status") or "Ideia").strip(),
-                data_postagem=(linha.get("Data Postagem") or "").strip(),
-                nome=(linha.get("Nome do Produto") or "").strip(),
-                nicho=(linha.get("Nicho") or "").strip(),
-                preco=(linha.get("Preco Medio (R$)") or "").strip(),
-                comissao=(linha.get("Comissao Est (R$)") or "").strip(),
-                link_afiliado=(linha.get("Link Afiliado Shopee") or "").strip(),
-                link_vitrine=(linha.get("Link Vitrine (Bio)") or "").strip(),
-                pasta_midias=(linha.get("Pasta Midias") or "").strip(),
-                gancho=(linha.get("Roteiro / Gancho") or "").strip(),
-                post_agendado=(linha.get("Post Agendado") or "Nao").strip(),
-                prompt_criativo=(linha.get("Prompt Criativo") or "").strip(),
-                observacoes=(linha.get("Observacoes") or "").strip(),
-                media_id_instagram=(linha.get("Media ID Instagram") or "").strip(),
-                comentarios_quero=(linha.get("Comentarios QUERO") or "").strip(),
-                alcance=(linha.get("Alcance") or "").strip(),
-                salvamentos=(linha.get("Salvamentos") or "").strip(),
-                nota_manual=(linha.get("Nota Manual") or "").strip(),
-            )
-            if p.id:
+            p = produto_de_linha(linha)
+            if p:
                 prods.append(p)
     return prods
 
 
-def salvar_produtos(prods: list[Produto], csv_path: Path | None = None) -> None:
-    """Salva a lista de produtos de volta no CSV (planilha local)."""
+def salvar_csv_local(prods: list[Produto], csv_path: Path | None = None) -> None:
+    """Grava a lista no CSV local (backup). Não sincroniza com o Sheets."""
+    validar_ids_unicos(prods)
     path = csv_path or CSV_PATH
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=COLUNAS)
@@ -197,5 +218,5 @@ GEMINI_API_KEY = ENV.get("GEMINI_API_KEY", "")
 
 if __name__ == "__main__":
     # autoteste rápido: python config.py
-    for p in ler_produtos():
+    for p in ler_csv_local():
         print(p.id, "|", p.nome, "|", p.status, "| clipes:", len(p.clipes()))

@@ -1,11 +1,11 @@
 import os
-import csv
 import requests
 import logging
-from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
+
+from sheets import ler_produtos
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -27,29 +27,24 @@ def buscar_link_por_media_id(media_id: str) -> str:
     """
     Retorna o link afiliado associado ao media_id do Instagram.
 
-    O mapeamento é lido de ``achados.csv``. A coluna ``Media ID Instagram``
-    deve conter o ID da publicação (preenchida manualmente após cada post).
+    Usa a porta única ``sheets.ler_produtos`` (Sheets + fallback CSV).
+    A coluna ``Media ID Instagram`` é preenchida após cada post.
     Se não encontrar correspondência, devolve um link genérico da vitrine.
     """
-    csv_path = Path(__file__).resolve().parent / "achados.csv"
     link_padrao = os.getenv("LINK_VITRINE_PADRAO", "https://beacons.ai/sualoja")
-
-    if not csv_path.exists():
-        logger.warning("achados.csv não encontrado — usando link padrão")
-        return link_padrao
+    alvo = str(media_id).strip()
 
     try:
-        with open(csv_path, newline="", encoding="utf-8") as f:
-            for linha in csv.DictReader(f):
-                if (linha.get("Media ID Instagram") or "").strip() == str(media_id).strip():
-                    link = (linha.get("Link Afiliado Shopee") or "").strip()
-                    if link:
-                        logger.info("Link encontrado para media_id %s: %s", media_id, link)
-                        return link
+        for p in ler_produtos():
+            if (p.media_id_instagram or "").strip() == alvo:
+                link = (p.link_afiliado or "").strip()
+                if link:
+                    logger.info("Link encontrado para media_id %s: %s", media_id, link)
+                    return link
     except Exception as exc:
-        logger.error("Erro ao ler achados.csv: %s", exc)
+        logger.error("Erro ao ler produtos: %s", exc)
 
-    logger.warning("media_id %s não encontrado no CSV — usando link padrão", media_id)
+    logger.warning("media_id %s não encontrado — usando link padrão", media_id)
     return link_padrao
 
 def curtir_comentario(comment_id: str):

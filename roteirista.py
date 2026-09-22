@@ -25,6 +25,7 @@ from pathlib import Path
 
 from config import Produto
 from gemini_client import _chamar_gemini
+from prompts import ESTILOS
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +74,14 @@ Responda com este JSON:
 _USER_ROTEIRO = """\
 Escreva um roteiro de exatamente 20 segundos para o produto: {nome}
 Dor / utilidade principal: {dor}
+Estilo/persona do vídeo: {estilo_label} — {estilo_desc}
 {secao_clipes}
 O vídeo deve seguir esta estrutura:
 1. GANCHO nos primeiros 3 segundos — use exatamente: "{gancho}"
 2. DEMONSTRAÇÃO de duas funcionalidades práticas
 3. CTA: comentar "QUERO" para receber o link por DM
+
+Adapte ritmo, vocabulário e tom à persona acima sem violar as regras de formato.
 
 Regras:
 - Locução em português brasileiro, informal, estilo UGC, SEM emoji
@@ -129,18 +133,22 @@ def gerar_ganchos(produto: Produto) -> list[dict]:
     return []
 
 
-def gerar_roteiro(produto: Produto) -> dict | None:
+def gerar_roteiro(produto: Produto, estilo: str = "chocante") -> dict | None:
     """Gera roteiro JSON para o produto.
 
     Se ``produto.gancho`` estiver preenchido, usa-o como âncora.
     Se existirem clipes em ``produto.pasta_clipes``, passa a lista ao Gemini
     para que os cortes sejam adaptados ao material real disponível.
+    ``estilo`` é a persona de ``prompts.ESTILOS`` e entra no prompt do Gemini.
 
     Retorna dict ou None em falha total.
     """
     dor = produto.gancho or f"utilidade de {produto.nome} no dia a dia"
     gancho = produto.gancho or f"Esse produto vai mudar sua rotina"
     num = produto.id.replace("#", "")
+    estilo_info = ESTILOS.get(estilo, ESTILOS["chocante"])
+    estilo_label = estilo_info["label"]
+    estilo_desc = estilo_info["descricao"]
 
     # ── Clipes disponíveis ───────────────────────────────────────────────────
     clipes = produto.clipes()
@@ -166,6 +174,8 @@ def gerar_roteiro(produto: Produto) -> dict | None:
         dor=dor,
         gancho=gancho,
         num=num,
+        estilo_label=estilo_label,
+        estilo_desc=estilo_desc,
         secao_clipes=secao_clipes,
         instrucao_clipes=instrucao_clipes,
     )
@@ -182,8 +192,12 @@ def gerar_roteiro(produto: Produto) -> dict | None:
             raise ValueError("JSON sem chave 'locucao'")
         if "comentario_fixo" in dados:
             dados["comentario_fixo"] = dados["comentario_fixo"].replace("NN", num)
-        # registra se foi gerado com clipes reais
-        dados["_meta"] = {"com_clipes": bool(clipes), "n_clipes": len(clipes)}
+        # registra se foi gerado com clipes reais e o estilo usado
+        dados["_meta"] = {
+            "com_clipes": bool(clipes),
+            "n_clipes": len(clipes),
+            "estilo": estilo,
+        }
         return dados
     except json.JSONDecodeError as exc:
         logger.warning("JSON inválido do Gemini: %s", exc)
