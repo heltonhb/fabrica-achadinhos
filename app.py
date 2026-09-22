@@ -48,7 +48,7 @@ SECOES = [
     "📋 Produtos",
     "➕ Novo Produto",
     "🎬 Mídia",
-    "🎥 Render",
+    "🚀 Pipeline",
     "📝 Legenda",
     "🤖 Gerar Prompt",
 ]
@@ -212,7 +212,7 @@ with st.sidebar:
     1. Recarregue para ler a planilha
     2. Clique num produto para ver/gerar prompts
     3. Copie o prompt e cole no Google Vids ou NotebookLM
-    4. Em **🎥 Render**, gere o vídeo final (requer ffmpeg)
+    4. Em **🚀 Pipeline**, gere gancho, roteiro e pacote de post
     """)
 
 # ─── Carrega dados na primeira vez ────────────────────────────────────────────
@@ -412,7 +412,7 @@ if secao == "🎬 Mídia":
                 st.markdown(f"**Duração total:** {r['duracao_total']}s")
 
                 if r["pronto"]:
-                    st.success("✅ Mídia pronta para render!")
+                    st.success("✅ Mídia pronta — o roteiro vai usar esses clipes!")
                 else:
                     st.warning("⚠️ Mínimo: 3 clipes, pelo menos 2 verticais (9:16)")
 
@@ -522,9 +522,9 @@ if secao == "🎬 Mídia":
             - 5 clipes para ~20s de vídeo
             """)
 
-# ─── SEÇÃO: Render (pipeline) ────────────────────────────────────────────────
-if secao == "🎥 Render":
-    st.subheader("🎥 Render — gancho → roteiro → voz → vídeo final")
+# ─── SEÇÃO: Pipeline ─────────────────────────────────────────────────────────
+if secao == "🚀 Pipeline":
+    st.subheader("🚀 Pipeline — gancho → roteiro → pacote de post")
 
     if not st.session_state.produtos:
         st.info("Carregue a planilha primeiro (sidebar → Recarregar)")
@@ -576,11 +576,11 @@ if secao == "🎥 Render":
                 key="render_ganchos",
             )
 
-        if st.button("🚀 Processar / Renderizar", type="primary", use_container_width=True):
-            # import lazy: pipeline puxa ffmpeg/render só quando necessário
+        if st.button("🚀 Processar", type="primary", use_container_width=True):
+            # import lazy: pipeline só é carregado quando o botão é clicado
             from pipeline import processar_produto
 
-            with st.spinner(f"Processando {p.id} — isto pode demorar (render)..."):
+            with st.spinner(f"Processando {p.id} — gerando gancho, roteiro e pacote..."):
                 try:
                     res = processar_produto(
                         p,
@@ -596,38 +596,25 @@ if secao == "🎥 Render":
                 else:
                     res["id"] = p.id
                     st.session_state.ultimo_render = res
-                    # persiste status ("Editado") e dados na planilha
+                    # persiste status e dados na planilha
                     try:
                         salvar_produtos(st.session_state.produtos)
                     except Exception as exc:
-                        st.warning(f"Render ok, mas falhou ao salvar na planilha: {exc}")
+                        st.warning(f"Pipeline ok, mas falhou ao salvar na planilha: {exc}")
                     st.rerun()
 
-        # resultado do último render
+        # resultado do último pipeline
         ultimo = st.session_state.get("ultimo_render")
         if ultimo:
             st.divider()
             st.markdown(f"#### Resultado — `{ultimo.get('id', '?')}`")
             if ultimo.get("ok"):
-                st.success("✅ Render concluído")
-            elif ultimo.get("motivo") == "sem_clipes":
-                st.warning("⊘ Aguardando clipes — adicione vídeos em `Midias/`")
+                st.success("✅ Pipeline concluído — vídeo agora é feito no Google Vids")
             else:
                 st.error(f"✗ Erro: {ultimo.get('erro', 'desconhecido')}")
 
             for linha in ultimo.get("log", []):
                 st.caption(f"• {linha}")
-
-            video_path = ultimo.get("video")
-            if video_path and Path(video_path).exists():
-                st.video(video_path)
-                st.download_button(
-                    "📥 Baixar vídeo (.mp4)",
-                    data=Path(video_path).read_bytes(),
-                    file_name=Path(video_path).name,
-                    mime="video/mp4",
-                    use_container_width=True,
-                )
 
             pacote_path = ultimo.get("pacote")
             if pacote_path and Path(pacote_path).exists():
@@ -643,10 +630,9 @@ if secao == "🎥 Render":
             st.markdown("""
             1. **Gancho** — 3 opções via Gemini (ou o da planilha)
             2. **Roteiro** — JSON 20s adaptado ao estilo e aos clipes reais
-            3. **Voz** — edge-tts + timings por palavra
-            4. **Visual** — badge, CTA e legendas karaoke
-            5. **Trilha** — áudio sintetizado na duração certa
-            6. **Render** — ffmpeg → `renders/` + `pacote_post.txt`
+            3. **Pacote** — `pacote_post.txt` (legenda, hashtags, regras ManyChat)
+
+            O vídeo em si é feito no Google Vids com os prompts da seção 🤖 Gerar Prompt.
             """)
 
 # ─── SEÇÃO: Legenda Instagram ────────────────────────────────────────────────

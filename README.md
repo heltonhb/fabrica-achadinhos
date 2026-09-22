@@ -5,20 +5,14 @@ Pipeline de conteúdo para vídeos curtos de produtos (Reels/TikTok).
 ## Pré-requisitos
 
 - **Python 3.10+**
-- **FFmpeg** (necessário para medir duração, render e legendas)
 
-```bash
-# Debian/Ubuntu
-sudo apt install ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# Windows — instale e coloque ffmpeg no PATH
-# https://www.gyan.dev/ffmpeg/builds/
-```
-
-Confirme com `ffmpeg -version` e `ffprobe -version`.
+> FFmpeg **não é mais obrigatório**: o pipeline gera só texto (gancho, roteiro,
+> pacote de post) e o vídeo é feito no Google Vids. Ele só é necessário se você
+> for rodar o render local legado (`render.py`/`voz.py`):
+>
+> ```bash
+> sudo apt install ffmpeg   # Debian/Ubuntu — brew install ffmpeg no macOS
+> ```
 
 ## Início Rápido
 
@@ -58,7 +52,7 @@ pytest -q
 1. **📋 Produtos** — gerencia produtos (status, links, métricas)
 2. **➕ Novo Produto** — adiciona achadinhos
 3. **🎬 Mídia** — baixa B-Roll de Shopee/AliExpress ou manual
-4. **🎥 Render** — roda o pipeline e gera o MP4 final + pacote de post
+4. **🚀 Pipeline** — gera gancho, roteiro e pacote de post (vídeo no Google Vids)
 5. **📝 Legenda** — gera legendas para Instagram
 6. **🤖 Gerar Prompt** — gera prompts via Gemini para Google Vids/NotebookLM
 
@@ -74,11 +68,10 @@ python pipeline.py #01 --sem-ganchos # usa o gancho da planilha
 
 Estilos: `chocante` (padrão), `educativo`, `lifestyle`, `comparativo`.
 
-Etapas: gancho → roteiro → voz → visual → trilha → render → `pacote_post.txt`.
+Etapas: gancho → roteiro → `pacote_post.txt` (o vídeo é feito no Google Vids).
 
 Saídas:
-- `Produtos/#NN_Slug/` — roteiro, locução, legendas, pacote
-- `renders/` — vídeo final 1080×1920
+- `Produtos/#NN_Slug/` — gancho, roteiro, pacote de post
 
 ## Webhook Instagram (opcional)
 
@@ -110,11 +103,11 @@ Copie `.env.example` para `.env` e preencha:
 |---------|--------|
 | `app.py` | Interface Streamlit |
 | `sheets.py` | Porta única de leitura/escrita (Sheets + CSV) |
-| `pipeline.py` | Orquestrador do render |
+| `pipeline.py` | Orquestrador (gancho → roteiro → pacote) |
 | `prompts.py` | Geração de prompts via Gemini |
 | `roteirista.py` | Ganchos e roteiro via Gemini |
-| `voz.py` | Locução TTS (edge-tts) |
-| `render.py` | Composição ffmpeg |
+| `voz.py` | Locução TTS — legado do render local |
+| `render.py` | Composição ffmpeg — legado do render local |
 | `legenda.py` | Geração de legendas Instagram |
 | `midia.py` | Gerenciamento de mídia |
 | `scraping.py` | Extração de mídia de plataformas |

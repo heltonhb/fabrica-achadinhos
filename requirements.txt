@@ -12,14 +12,14 @@ google-auth-oauthlib>=1.1.0
 # Geração de roteiro (Gemini)
 google-genai>=1.0.0
 
-# Locução TTS
+# Locução TTS — só para o render local legado (voz.py)
 edge-tts>=6.1.0
 
-# Processamento de áudio/trilha
+# Processamento de áudio/trilha — só para o render local legado (trilha.py)
 numpy>=1.24.0
 scipy>=1.11.0
 
-# Imagens (badge, CTA, legendas)
+# Imagens (badge, CTA, legendas) — só para o render local legado (visual.py)
 Pillow>=10.0.0
 
 # Requisições HTTP

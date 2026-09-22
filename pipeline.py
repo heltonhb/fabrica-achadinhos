@@ -1,5 +1,9 @@
 """
-pipeline.py — Orquestrador: gancho → roteiro → voz → visual → trilha → render → pacote.
+pipeline.py — Orquestrador: gancho → roteiro → pacote de post.
+
+O vídeo é feito fora do app (Google Vids) a partir dos prompts da seção
+Gerar Prompt. As etapas locais de voz/visual/trilha/render foram removidas —
+o pipeline não requer mais ffmpeg.
 
 Uso:
     python pipeline.py                   # processa todos os produtos
@@ -19,12 +23,8 @@ from dataclasses import replace as dc_replace
 from pathlib import Path
 
 from prompts import ESTILOS
-from render import renderizar
 from roteirista import gerar_ganchos, gerar_roteiro
 from sheets import Produto, ler_produtos, salvar_produtos
-from trilha import gerar_trilha
-from visual import gerar_badge, gerar_cta, gerar_legendas
-from voz import duracao_ffprobe, gerar_voz
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def processar_produto(
                       antes de gerar o roteiro. Se False, usa ``p.gancho`` do CSV.
 
     Returns:
-        Dict com: ok, log, video (se render OK), pacote.
+        Dict com: ok, log, pacote.
     """
     if estilo not in ESTILOS:
         logger.warning("Estilo '%s' desconhecido — usando 'chocante'", estilo)
@@ -134,74 +134,22 @@ def processar_produto(
 
     p_roteiro.roteiro = roteiro
 
-    # ── 3. Voz ───────────────────────────────────────────────────────────────
-    mp3 = pasta / "locucao.mp3"
-    arq_palavras = pasta / "palavras.json"
-
-    if forcar or not mp3.exists():
-        info = gerar_voz(roteiro["locucao"], pasta)
-        log.append(f"voz: {info['duracao']:.1f}s, {len(info['palavras'])} palavras")
-    elif not arq_palavras.exists():
-        # mp3 antigo sem timings de palavra — regenera para destravar legendas
-        info = gerar_voz(roteiro["locucao"], pasta)
-        log.append(f"voz: regenerada (faltava palavras.json) — {info['duracao']:.1f}s")
-    else:
-        info = {"duracao": duracao_ffprobe(mp3)}
-        log.append("voz: reutilizada")
-
-    # ── 4. Visual: badge + CTA + legendas karaoke ────────────────────────────
-    gerar_badge(pasta, p.id)
-    gerar_cta(pasta)
-    if not arq_palavras.exists():
-        raise RuntimeError(
-            f"palavras.json ausente em {pasta} — a locução não tem timings de palavra. "
-            "Rode com --forcar para regenerar a voz."
-        )
-    try:
-        palavras = json.loads(arq_palavras.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"palavras.json inválido em {arq_palavras}: {exc}. "
-            "Rode com --forcar para regenerar a voz."
-        ) from exc
-    if not isinstance(palavras, list) or not palavras:
-        raise RuntimeError(
-            f"palavras.json vazio em {arq_palavras} — rode com --forcar para regenerar a voz."
-        )
-    gerar_legendas(pasta, palavras)
-    log.append("visual: badge + CTA + legendas OK")
-
-    # ── 5. Trilha sintetizada na duração certa ───────────────────────────────
-    dur_total = info["duracao"] + 1.0
-    if not (pasta / "trilha.wav").exists() or forcar:
-        gerar_trilha(dur_total + 2.0, pasta / "trilha.wav")
-        log.append("trilha: gerada")
-    else:
-        log.append("trilha: reutilizada")
-
-    # ── 6. Render (requer clipes em Midias/#NN_Slug/) ────────────────────────
-    clipes = p.clipes()
-    if not clipes:
-        log.append(f"render: PENDENTE — adicione clipes em Midias/{p.slug}/")
-        return {"ok": False, "log": log, "motivo": "sem_clipes"}
-
-    video = renderizar(p_roteiro)
-    log.append(f"render: {video}")
-
-    # ── 7. Pacote de post ────────────────────────────────────────────────────
-    pacote = montar_pacote(p_roteiro, str(video), estilo=estilo, gancho_texto=gancho_texto)
+    # ── 3. Pacote de post ────────────────────────────────────────────────────
+    # voz/visual/trilha/render removidos — o vídeo é feito no Google Vids.
+    pacote = montar_pacote(p_roteiro, estilo=estilo, gancho_texto=gancho_texto)
     log.append("pacote: pronto")
 
-    # ── 8. Atualiza status na planilha ───────────────────────────────────────
-    p.status = "Editado"
+    # ── 4. Atualiza status na planilha ───────────────────────────────────────
+    # só avança: não regride status já definido manualmente pelo usuário
+    if p.status == "Ideia":
+        p.status = "Roteiro Pronto"
     p.post_agendado = "Nao"
 
-    return {"ok": True, "log": log, "video": str(video), "pacote": str(pacote)}
+    return {"ok": True, "log": log, "pacote": str(pacote)}
 
 
 def montar_pacote(
     p: Produto,
-    video_path: str,
     estilo: str = "chocante",
     gancho_texto: str = "",
 ) -> Path:
@@ -215,7 +163,7 @@ def montar_pacote(
         f"Estilo: {estilo_label}",
         f"Gancho usado: {gancho_texto or p.gancho}",
         "",
-        "▶ VÍDEO: " + video_path,
+        "▶ VÍDEO: gerar no Google Vids (prompt na seção 🤖 Gerar Prompt)",
         "",
         "── LEGENDA (copiar/colar) ──",
         r.get("legenda", ""),
@@ -317,12 +265,11 @@ if __name__ == "__main__":
 
     print()
     for r in res:
-        marca = "✓" if r.get("ok") else ("⊘" if r.get("motivo") == "sem_clipes" else "✗")
+        marca = "✓" if r.get("ok") else "✗"
         detalhe = "; ".join(r.get("log", []))
         erro = f" ERRO: {r['erro']}" if r.get("erro") else ""
         print(f"  {marca} {r['id']}: {detalhe}{erro}")
 
     ok = sum(1 for r in res if r.get("ok"))
-    pendente = sum(1 for r in res if r.get("motivo") == "sem_clipes")
-    falha = len(res) - ok - pendente
-    print(f"\n  ✓ {ok} prontos  ⊘ {pendente} aguardando clipes  ✗ {falha} com erro")
+    falha = len(res) - ok
+    print(f"\n  ✓ {ok} prontos  ✗ {falha} com erro")
