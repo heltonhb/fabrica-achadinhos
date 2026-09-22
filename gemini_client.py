@@ -143,7 +143,10 @@ def _chamar_gemini(
             (a mensagem inclui o último erro da API).
     """
     if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY ausente no .env")
+        raise RuntimeError(
+            "GEMINI_API_KEY ausente — preencha no .env (local) "
+            "ou no secret GEMINI_API_KEY (Streamlit Cloud)"
+        )
 
     client = genai.Client(api_key=GEMINI_API_KEY)
     lista = modelos or MODELOS_PADRAO

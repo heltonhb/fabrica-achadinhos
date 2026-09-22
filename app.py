@@ -966,6 +966,12 @@ if secao == "🤖 Gerar Prompt":
                         dica = "Cota free-tier esgotada (limite de ~20 req/modelo). Aguarde alguns minutos e clique em 🔄 Regerar."
                     elif "503" in erro_api or "UNAVAILABLE" in erro_api:
                         dica = "Modelo instável (503 alta demanda). Clique em 🔄 Regerar em instantes."
+                    elif "GEMINI_API_KEY" in erro_api:
+                        dica = (
+                            "Chave não configurada — local: preencha `GEMINI_API_KEY` no "
+                            "`.env`; nuvem: *Settings → Secrets* no Streamlit Cloud. "
+                            "Salve a chave e então clique em 🔄 Regerar."
+                        )
                     else:
                         dica = "Clique em 🔄 Regerar para tentar de novo."
                     st.error(
