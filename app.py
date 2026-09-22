@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace as dc_replace
 from pathlib import Path
 
 import streamlit as st
@@ -20,7 +21,9 @@ from prompts import (
     gerar_prompt_podcast,
     gerar_prompt_carrossel,
     gerar_todos_prompts,
+    ESTILOS,
 )
+from roteirista import gerar_ganchos
 from midia import resumo_midia, gerar_links_busca, criar_pasta_midia, MIDIAS_DIR, _slugificar
 from scraping import extrair_de_url, baixar_todas_midias, baixar_urls_manuais
 from legenda import gerar_legenda, gerar_todas_legendas
@@ -40,6 +43,20 @@ if "produtos" not in st.session_state:
     st.session_state.produtos = []
 if "indice_editando" not in st.session_state:
     st.session_state.indice_editando = None
+if "opcoes_gancho" not in st.session_state:
+    st.session_state.opcoes_gancho = []
+if "gancho_selecionado" not in st.session_state:
+    st.session_state.gancho_selecionado = ""
+if "produto_id_prompt" not in st.session_state:
+    # rastreia qual produto está ativo na tab Gerar Prompt
+    st.session_state.produto_id_prompt = None
+
+
+def _limpar_estado_prompt() -> None:
+    """Zera todos os estados ligados à tab Gerar Prompt."""
+    st.session_state.opcoes_gancho = []
+    st.session_state.gancho_selecionado = ""
+    st.session_state.prompt_gerado = None
 
 
 def recarregar():
@@ -447,21 +464,108 @@ with tab_prompt:
 
         p = produtos_invertidos[idx_selecionado]
 
+        # ── Detecta troca de produto e limpa estado ──────────────────────────
+        if st.session_state.produto_id_prompt != p.id:
+            st.session_state.produto_id_prompt = p.id
+            _limpar_estado_prompt()
+            st.rerun()
+
         # info do produto
         with st.expander("📝 Detalhes do produto", expanded=False):
             st.markdown(f"**{p.id}** — **{p.nome}**")
             st.markdown(f"Nicho: {p.nicho} | Preço: R$ {p.preco} | Comissão: R$ {p.comissao}")
-            st.markdown(f"**Gancho:** {p.gancho}")
+            st.markdown(f"**Gancho atual:** {p.gancho or '_(não preenchido)_'}")
             st.markdown(f"**Link Afiliado:** {p.link_afiliado}")
+            clipes = p.clipes()
+            if clipes:
+                st.success(f"🎬 {len(clipes)} clipe(s) disponível(is) — roteiro será adaptado ao material real")
+                for c in clipes:
+                    st.caption(f"  • {c.name}")
+            else:
+                st.warning("⚠️ Nenhum clipe em Midias/ — cortes serão genéricos")
 
         st.divider()
 
-        # tipo de criativo
-        tipo_criativo = st.radio(
-            "Tipo de criativo:",
-            ["🎬 Reels", "🎵 TikTok", "🎙️ Podcast (NotebookLM)", "📸 Carrossel"],
-            horizontal=True,
-        )
+        # ── PASSO 1: Gancho ──────────────────────────────────────────────────
+        st.markdown("### 1️⃣ Gancho de abertura")
+
+        # valor inicial: gancho selecionado > gancho do produto > vazio
+        gancho_inicial = st.session_state.gancho_selecionado or p.gancho or ""
+
+        col_gancho, col_btn_gancho = st.columns([3, 1])
+        with col_gancho:
+            gancho_editado = st.text_input(
+                "Gancho (edite ou use o do produto):",
+                value=gancho_inicial,
+                key=f"gancho_input_{p.id}",   # chave vinculada ao produto evita reuso
+                placeholder="Ex: Esse produto me salvou da bagunça da geladeira",
+            )
+        with col_btn_gancho:
+            st.markdown("<br>", unsafe_allow_html=True)
+            gerar_btn = st.button("🎲 Sugerir 3 ganchos", use_container_width=True)
+
+        if gerar_btn:
+            with st.spinner("Gemini gerando opções de gancho..."):
+                opcoes_gancho = gerar_ganchos(p)
+            if opcoes_gancho:
+                st.session_state.opcoes_gancho = opcoes_gancho
+            else:
+                st.error("Não foi possível gerar ganchos. Verifique a GEMINI_API_KEY.")
+
+        # exibe as opções de gancho
+        if st.session_state.opcoes_gancho:
+            st.markdown("**Escolha um gancho (clique para usar):**")
+            cols_g = st.columns(3)
+            for i, g in enumerate(st.session_state.opcoes_gancho):
+                with cols_g[i]:
+                    emoji = {"dor": "😣", "surpresa": "😮", "economia": "💰"}.get(
+                        g.get("angulo", ""), "✨"
+                    )
+                    st.markdown(f"**{emoji} {g.get('angulo', '').upper()}**")
+                    st.info(f'"{g.get("texto", "")}"')
+                    st.caption(g.get("explicacao", ""))
+                    if st.button("Usar este", key=f"usar_gancho_{p.id}_{i}", use_container_width=True):
+                        st.session_state.gancho_selecionado = g["texto"]
+                        st.session_state.opcoes_gancho = []
+                        st.rerun()
+
+        # feedback visual do gancho ativo
+        gancho_final = gancho_editado.strip()
+        if gancho_final and gancho_final != p.gancho:
+            st.success(f"✅ Gancho personalizado ativo: **{gancho_final}**")
+        elif not gancho_final:
+            st.warning("⚠️ Gancho vazio — o Gemini usará um genérico")
+
+        # monta produto com gancho corrigido (sem alterar o objeto original)
+        p_para_gerar = dc_replace(p, gancho=gancho_final) if gancho_final else p
+
+        st.divider()
+
+        # ── PASSO 2: Tipo e Estilo ────────────────────────────────────────────
+        st.markdown("### 2️⃣ Tipo e estilo do criativo")
+
+        col_tipo, col_estilo = st.columns(2)
+        with col_tipo:
+            tipo_criativo = st.radio(
+                "Tipo de criativo:",
+                ["🎬 Reels", "🎵 TikTok", "🎙️ Podcast (NotebookLM)", "📸 Carrossel"],
+                key="tipo_criativo_radio",
+            )
+        with col_estilo:
+            estilo_opcoes = {v["label"]: k for k, v in ESTILOS.items()}
+            estilo_label_sel = st.radio(
+                "Estilo / persona:",
+                list(estilo_opcoes.keys()),
+                key="estilo_radio",
+                help=(
+                    "😱 Chocante — revelação dramática\n"
+                    "🎓 Educativo — dica de amigo calmo\n"
+                    "✨ Lifestyle — aspiracional e visual\n"
+                    "💰 Comparativo — foco em economia"
+                ),
+            )
+            estilo_sel = estilo_opcoes[estilo_label_sel]
+            st.caption(ESTILOS[estilo_sel]["descricao"])
 
         mapa_tipo = {
             "🎬 Reels": "reels",
@@ -470,60 +574,114 @@ with tab_prompt:
             "📸 Carrossel": "carrossel",
         }
 
+        st.divider()
+
+        # ── PASSO 2.5: Estratégia da Parte 2 ─────────────────────────────
+        st.markdown("### Estratégia da Parte 2")
+
+        estrategia = st.radio(
+            "O que fazer na Parte 2 (10-20s)?",
+            ["🎭 Plot Twist (uso inusitado)", "💎 Reforço de Qualidade"],
+            horizontal=True,
+            key="estrategia_radio",
+            help=(
+                "🎭 Plot Twist — mostra um uso criativo/inesperado do produto\n"
+                "💎 Qualidade — reforça materiais, durabilidade, custo-benefício"
+            ),
+        )
+
+        if estrategia.startswith("🎭"):
+            estrategia_val = "plot_twist"
+            uso_inusitado = st.text_input(
+                "🎯 Uso inusitado (opcional):",
+                placeholder="Ex: serve pra aspirar o teclado do notebook",
+                help="Se preencher, o Gemini usa EXATAMENTE esse uso. "
+                     "Se deixar em branco, ele sugere um uso livremente.",
+                key="uso_inusitado_input",
+            )
+            uso_inusitado_val = uso_inusitado.strip() if uso_inusitado.strip() else None
+        else:
+            estrategia_val = "qualidade"
+            uso_inusitado_val = None
+
+        # ── PASSO 3: Gerar ────────────────────────────────────────────────────
+        st.markdown("### 3️⃣ Gerar")
+
         if st.button("⚡ Gerar Prompt", use_container_width=True, type="primary"):
             tipo = mapa_tipo[tipo_criativo]
-            # limpa estado anterior
             st.session_state.prompt_gerado = None
 
-            if tipo in ("reels", "tiktok"):
-                st.session_state.prompt_gerado = gerar_prompt_video(p, tipo)
-            elif tipo == "podcast":
-                st.session_state.prompt_gerado = [gerar_prompt_podcast(p)]
-            else:
-                st.session_state.prompt_gerado = [gerar_prompt_carrossel(p)]
+            with st.spinner("Gemini gerando prompt..."):
+                if tipo in ("reels", "tiktok"):
+                    resultado = gerar_prompt_video(
+                        p_para_gerar, tipo, estilo_sel,
+                        uso_inusitado=uso_inusitado_val,
+                        estrategia_parte2=estrategia_val,
+                    )
+                elif tipo == "podcast":
+                    resultado = [gerar_prompt_podcast(p_para_gerar)]
+                else:
+                    resultado = [gerar_prompt_carrossel(p_para_gerar)]
 
+            st.session_state.prompt_gerado = resultado
             st.rerun()
 
         # exibe os prompts gerados
-        if "prompt_gerado" in st.session_state and st.session_state.prompt_gerado:
-            raw = st.session_state.prompt_gerado
-            # garante que é lista
-            if isinstance(raw, list):
-                prompts = raw
-            else:
-                prompts = [raw]
+        prompts_gerados = st.session_state.get("prompt_gerado")
+        if prompts_gerados:
+            prompts = prompts_gerados if isinstance(prompts_gerados, list) else [prompts_gerados]
 
             for prompt in prompts:
                 st.divider()
-                # badge da parte
                 if "parte1" in prompt.tipo:
-                    st.info("📌 **PARTE 1** — Apresentação do Produto (0-10s)")
+                    st.info("📌 **PARTE 1** — Apresentação do Produto (0–10s)")
                 elif "parte2" in prompt.tipo:
-                    st.warning("🎬 **PARTE 2** — Plot Twist + CTA (10-20s)")
+                    st.warning("🎬 **PARTE 2** — Plot Twist + CTA (10–20s)")
                 else:
                     st.success(f"✅ **{prompt.tipo.upper()}**")
 
+                estilo_meta = prompt.metadados.get("estilo", "")
+                if estilo_meta and estilo_meta in ESTILOS:
+                    st.caption(f"Estilo: {ESTILOS[estilo_meta]['label']}")
+
                 st.markdown(f"**{prompt.produto_nome}**")
 
-                # prompt
-                st.code(prompt.prompt_texto, language=None)
+                # caixa de texto editável
+                chave_edit = f"edit_{prompt.tipo}"
+                texto_editado = st.text_area(
+                    "Prompt (edite se necessário):",
+                    value=prompt.prompt_texto,
+                    height=300,
+                    key=chave_edit,
+                ) or prompt.prompt_texto
 
-                # botões
+                # atualiza o prompt com a edição (se houver)
+                if texto_editado != prompt.prompt_texto:
+                    prompt.prompt_texto = texto_editado
+
+                # cópia rápida (seleciona tudo com 1 clique)
+                with st.expander("📋 Copiar prompt (clique pra selecionar)", expanded=False):
+                    st.code(texto_editado, language=None)
+
                 col_a, col_b = st.columns(2)
                 with col_a:
                     st.download_button(
                         "📥 Baixar .txt",
-                        data=prompt.prompt_texto,
+                        data=texto_editado,
                         file_name=f"prompt_{prompt.produto_id}_{prompt.tipo}.txt",
                         mime="text/plain",
                         use_container_width=True,
-                        key=f"dl_{prompt.tipo}",
+                        key=f"dl_{p.id}_{prompt.tipo}",
                     )
                 with col_b:
-                    if st.button("📋 Copiar", use_container_width=True, key=f"cp_{prompt.tipo}"):
-                        st.write("Prompt copiado!")
+                    if st.button(
+                        "🔄 Regerar este",
+                        use_container_width=True,
+                        key=f"regen_{p.id}_{prompt.tipo}",
+                    ):
+                        st.session_state.prompt_gerado = None
+                        st.rerun()
 
-            # metadados (resumo)
             if len(prompts) > 1:
                 with st.expander("🔧 Metadados"):
                     st.json(prompts[0].to_json())

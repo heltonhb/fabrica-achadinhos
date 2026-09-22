@@ -13,12 +13,11 @@ import csv
 import io
 import json
 import logging
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import requests
 
-from config import BASE_DIR, carregar_env
+from config import BASE_DIR, COLUNAS, Produto, carregar_env
 
 logger = logging.getLogger(__name__)
 
@@ -92,55 +91,6 @@ def _get_sheets_service():
         return None
 
 
-@dataclass
-class Produto:
-    """Um achadinho da planilha."""
-
-    id: str
-    status: str = "Ideia"
-    data_postagem: str = ""
-    nome: str = ""
-    nicho: str = ""
-    preco: str = ""
-    comissao: str = ""
-    link_afiliado: str = ""
-    link_vitrine: str = ""
-    pasta_midias: str = ""
-    gancho: str = ""
-    post_agendado: str = "Nao"
-    # campos gerados pelo pipeline
-    prompt_criativo: str = ""
-    observacoes: str = ""
-    roteiro: dict = field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        return {
-            "ID": self.id,
-            "Status": self.status,
-            "Data Postagem": self.data_postagem,
-            "Nome do Produto": self.nome,
-            "Nicho": self.nicho,
-            "Preco Medio (R$)": self.preco,
-            "Comissao Est (R$)": self.comissao,
-            "Link Afiliado Shopee": self.link_afiliado,
-            "Link Vitrine (Bio)": self.link_vitrine,
-            "Pasta Midias": self.pasta_midias,
-            "Roteiro / Gancho": self.gancho,
-            "Post Agendado": self.post_agendado,
-            "Prompt Criativo": self.prompt_criativo,
-            "Observacoes": self.observacoes,
-        }
-
-
-# Colunas esperadas na planilha
-COLUNAS = [
-    "ID", "Status", "Data Postagem", "Nome do Produto", "Nicho",
-    "Preco Medio (R$)", "Comissao Est (R$)", "Link Afiliado Shopee",
-    "Link Vitrine (Bio)", "Pasta Midias", "Roteiro / Gancho",
-    "Post Agendado", "Prompt Criativo", "Observacoes",
-]
-
-
 def ler_produtos() -> list[Produto]:
     """Lê a planilha Google Sheets via export CSV público."""
     try:
@@ -169,6 +119,11 @@ def ler_produtos() -> list[Produto]:
             post_agendado=(linha.get("Post Agendado") or "Nao").strip(),
             prompt_criativo=(linha.get("Prompt Criativo") or "").strip(),
             observacoes=(linha.get("Observacoes") or "").strip(),
+            media_id_instagram=(linha.get("Media ID Instagram") or "").strip(),
+            comentarios_quero=(linha.get("Comentarios QUERO") or "").strip(),
+            alcance=(linha.get("Alcance") or "").strip(),
+            salvamentos=(linha.get("Salvamentos") or "").strip(),
+            nota_manual=(linha.get("Nota Manual") or "").strip(),
         )
         if p.id:
             prods.append(p)
@@ -248,6 +203,11 @@ def _ler_csv_local() -> list[Produto]:
                 post_agendado=(linha.get("Post Agendado") or "Nao").strip(),
                 prompt_criativo=(linha.get("Prompt Criativo") or "").strip(),
                 observacoes=(linha.get("Observacoes") or "").strip(),
+                media_id_instagram=(linha.get("Media ID Instagram") or "").strip(),
+                comentarios_quero=(linha.get("Comentarios QUERO") or "").strip(),
+                alcance=(linha.get("Alcance") or "").strip(),
+                salvamentos=(linha.get("Salvamentos") or "").strip(),
+                nota_manual=(linha.get("Nota Manual") or "").strip(),
             )
             if p.id:
                 prods.append(p)

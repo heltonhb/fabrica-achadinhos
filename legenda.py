@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from dataclasses import dataclass
 
-from google import genai
-from google.genai import types
-from config import GEMINI_API_KEY, Produto
+from config import Produto
+from gemini_client import _chamar_gemini
 
 logger = logging.getLogger(__name__)
 
@@ -34,37 +32,6 @@ class LegendaInstagram:
     @property
     def copy_paste(self) -> str:
         return self.texto
-
-
-def _chamar_gemini(system_prompt: str, user_prompt: str) -> str:
-    """Chama o Gemini e retorna o texto gerado."""
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY ausente no .env")
-
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    modelos = ["gemini-3.6-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
-
-    for modelo in modelos:
-        for tentativa in range(3):
-            try:
-                resp = client.models.generate_content(
-                    model=modelo,
-                    contents=user_prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_prompt,
-                        temperature=0.8,
-                    ),
-                )
-                if resp.text:
-                    return resp.text.strip()
-            except Exception as exc:
-                if "429" in str(exc) or "500" in str(exc) or "503" in str(exc):
-                    time.sleep(2 ** tentativa * 2)
-                    continue
-                logger.warning("Gemini %s falhou: %s", modelo, str(exc)[:100])
-                break
-
-    raise RuntimeError("Gemini não respondeu nenhum modelo")
 
 
 # ─── System prompts ──────────────────────────────────────────────────────────
@@ -117,7 +84,7 @@ Responda APENAS com JSON válido (sem markdown):
 }}"""
 
     try:
-        resposta = _chamar_gemini(_SYSTEM_LEGENDA, user)
+        resposta = _chamar_gemini(_SYSTEM_LEGENDA, user, temperature=0.5)
         # tenta extrair JSON
         # remove markdown code block se tiver
         limpo = resposta.strip()

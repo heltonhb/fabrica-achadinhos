@@ -1,97 +1,193 @@
 """
-roteirista.py — Geração de roteiro de 20s via Gemini (JSON estruturado).
+roteirista.py — Geração de gancho e roteiro de 20s via Gemini (JSON estruturado).
 
-Estrutura rígida do roteiro (mesma do SOP do Helton):
-  Gancho 3s (sem apresentador) → 2 funcionalidades (2 cortes de ~2s)
-  → CTA ("comenta QUERO" / link na bio).
+Fluxo recomendado:
+  1. gerar_ganchos(produto)  → 3 opções de gancho para o usuário escolher
+  2. gerar_roteiro(produto)  → roteiro JSON completo
+     Se produto.gancho já estiver preenchido (pelo usuário ou pelo passo 1),
+     o roteiro o usa como âncora criativa.
+     Se clipes estiverem disponíveis em Midias/, o Gemini adapta os cortes
+     ao material real.
 
-Saída JSON do Gemini:
-  locucao            — texto exato da locução (50-60 palavras, ~17s)
-  cortes             — lista com o que mostrar em cada trecho
-  legenda            — caption do post no Instagram/TikTok
+Saída JSON do roteiro:
+  locucao            — texto exato da locução (≤60 palavras, ~17s)
+  cortes             — lista descrevendo o que mostrar em cada trecho
+  legenda            — caption para Instagram Reels / TikTok
   hashtags           — lista de hashtags (sem #)
-  comentario_fixo    — texto do comentário fixado com o link da bio
+  comentario_fixo    — comentário fixado com link da bio
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import time
+from pathlib import Path
 
-from google import genai
-from google.genai import types
-
-from config import GEMINI_API_KEY, Produto
+from config import Produto
+from gemini_client import _chamar_gemini
 
 logger = logging.getLogger(__name__)
 
-PROMPT_ROTEIRO = """Atue como roteirista de vídeos curtos de vendas para TikTok e Reels, especialista em achadinhos de marketplace (Shopee) do Brasil.
+# ─── System prompts ───────────────────────────────────────────────────────────
 
-Escreva um roteiro de exatamente 20 segundos para o produto: [NOME_DO_PRODUTO], que resolve a seguinte dor: [DOR/UTILIDADE].
+_SYSTEM_ROTEIRO = """\
+Atue como roteirista de vídeos curtos de vendas para TikTok e Reels,
+especialista em achadinhos de marketplace (Shopee) do Brasil.
+Responda APENAS com JSON válido, sem markdown, sem texto extra."""
 
-O vídeo deve seguir rigorosamente esta estrutura:
-1. GANCHO nos primeiros 3 segundos, sem apresentador, voz firme e direta;
-2. DEMONSTRAÇÃO de duas funcionalidades práticas (cortes de 2s cada);
-3. CTA para comentar "QUERO" (o link vai por DM) ou clicar no link da bio.
+_SYSTEM_GANCHOS = """\
+Você é um copywriter especialista em vídeos curtos de "achadinhos" para TikTok e Reels.
+Seu trabalho é criar GANCHOS de abertura de 3 segundos — a primeira frase falada no vídeo.
+
+Regras do gancho:
+- Máximo 10 palavras
+- Sem apresentação ("Olá", "Ei pessoal", etc.)
+- Voz direta e firme, como quem acabou de descobrir algo incrível
+- Deve gerar curiosidade ou apontar uma dor imediata
+- Português brasileiro informal, SEM emoji
+- Cada opção deve ter um ÂNGULO diferente (ex: dor, surpresa, comparação, economia)
+
+Responda APENAS com JSON válido."""
+
+# ─── Templates ────────────────────────────────────────────────────────────────
+
+_USER_GANCHOS = """\
+Gere 3 opções de gancho para o vídeo do produto: {nome}
+Nicho: {nicho}
+Preço: R$ {preco}
+
+Ângulos obrigatoriamente diferentes entre si:
+- Um focado na DOR que o produto resolve
+- Um focado na SURPRESA / "não sabia que isso existia"
+- Um focado em ECONOMIA / comparação com alternativa mais cara
+
+Responda com este JSON:
+{{
+  "ganchos": [
+    {{"angulo": "dor",      "texto": "...", "explicacao": "por que este gancho funciona"}},
+    {{"angulo": "surpresa", "texto": "...", "explicacao": "por que este gancho funciona"}},
+    {{"angulo": "economia", "texto": "...", "explicacao": "por que este gancho funciona"}}
+  ]
+}}"""
+
+_USER_ROTEIRO = """\
+Escreva um roteiro de exatamente 20 segundos para o produto: {nome}
+Dor / utilidade principal: {dor}
+{secao_clipes}
+O vídeo deve seguir esta estrutura:
+1. GANCHO nos primeiros 3 segundos — use exatamente: "{gancho}"
+2. DEMONSTRAÇÃO de duas funcionalidades práticas
+3. CTA: comentar "QUERO" para receber o link por DM
 
 Regras:
-- Locução em português brasileiro, informal, estilo UGC (vídeo de pessoa real mostrando achadinho), SEM emoji.
-- Texto da locução com no máximo 60 palavras no total.
-- Nada de "Olá, tudo bem?", sem introdução, direto ao gancho.
-- Cortes visuais descrevem o que aparece na tela em cada trecho (são clipes reais do produto em uso, já baixados do anúncio do fornecedor).
+- Locução em português brasileiro, informal, estilo UGC, SEM emoji
+- Máximo 60 palavras no total
+- Sem introdução ("Olá", "Ei pessoal"), direto ao gancho
+{instrucao_clipes}
+Responda com exatamente este JSON:
+{{
+ "locucao": "texto completo da locução, sem marcações de tempo",
+ "cortes": ["gancho (0-3s)", "funcionalidade 1 (3-8s)", "funcionalidade 2 (8-13s)", "CTA (13-20s)"],
+ "legenda": "legenda para Instagram Reels e TikTok com gatilho de curiosidade e CTA de comentar QUERO",
+ "hashtags": ["achadinhos", "shopee"],
+ "comentario_fixo": "Link do produto {num} disponível no link da minha bio!"
+}}"""
 
-Responda APENAS com um JSON válido, sem markdown, com exatamente estas chaves:
-{
- "locucao": "texto exato da locução, uma frase só, sem marcações de tempo",
- "cortes": ["o que mostrar no trecho do gancho (0-3s)", "funcionalidade 1 (3-8s)", "funcionalidade 2 (8-13s)", "CTA (13-20s)"],
- "legenda": "legenda do post para Instagram Reels e TikTok, com gatilho de curiosidade e CTA de comentar QUERO",
- "hashtags": ["achadinhos", "shopee", "..."],
- "comentario_fixo": "Link do produto NN disponível no link da minha bio!"
-}"""
+
+# ─── Funções públicas ─────────────────────────────────────────────────────────
+
+def gerar_ganchos(produto: Produto) -> list[dict]:
+    """Gera 3 opções de gancho via Gemini para o usuário escolher.
+
+    Retorna lista de dicts com keys: angulo, texto, explicacao.
+    Em caso de falha, retorna lista vazia.
+    """
+    user_prompt = _USER_GANCHOS.format(
+        nome=produto.nome,
+        nicho=produto.nicho or "geral",
+        preco=produto.preco or "XX,XX",
+    )
+
+    try:
+        texto = _chamar_gemini(
+            system_prompt=_SYSTEM_GANCHOS,
+            user_prompt=user_prompt,
+            temperature=0.9,          # ganchos pedem máxima criatividade
+            response_mime_type="application/json",
+        )
+        dados = json.loads(texto)
+        ganchos = dados.get("ganchos", [])
+        if not ganchos or not isinstance(ganchos, list):
+            raise ValueError("JSON sem chave 'ganchos' ou vazia")
+        logger.info("Gerados %d ganchos para %s", len(ganchos), produto.id)
+        return ganchos
+    except json.JSONDecodeError as exc:
+        logger.warning("JSON inválido ao gerar ganchos: %s", exc)
+    except Exception as exc:
+        logger.error("Gemini falhou ao gerar ganchos para %s: %s", produto.id, exc)
+
+    return []
 
 
 def gerar_roteiro(produto: Produto) -> dict | None:
-    """Gera roteiro JSON para o produto. Retorna dict ou None em falha total."""
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY ausente no .env")
+    """Gera roteiro JSON para o produto.
 
+    Se ``produto.gancho`` estiver preenchido, usa-o como âncora.
+    Se existirem clipes em ``produto.pasta_clipes``, passa a lista ao Gemini
+    para que os cortes sejam adaptados ao material real disponível.
+
+    Retorna dict ou None em falha total.
+    """
     dor = produto.gancho or f"utilidade de {produto.nome} no dia a dia"
-    prompt = PROMPT_ROTEIRO.replace("[NOME_DO_PRODUTO]", produto.nome)
-    prompt = prompt.replace("[DOR/UTILIDADE]", dor)
-    prompt = prompt.replace("NN", produto.id.replace("#", ""))
+    gancho = produto.gancho or f"Esse produto vai mudar sua rotina"
+    num = produto.id.replace("#", "")
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    modelos = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash"]
+    # ── Clipes disponíveis ───────────────────────────────────────────────────
+    clipes = produto.clipes()
+    if clipes:
+        nomes = [c.name for c in clipes]
+        secao_clipes = (
+            f"Clipes disponíveis (arquivos reais que serão usados na edição):\n"
+            + "\n".join(f"  - {n}" for n in nomes)
+            + "\n\n"
+        )
+        instrucao_clipes = (
+            "- Cada corte descrito deve referenciar UM dos clipes listados acima "
+            "pelo nome do arquivo (ex: 'clipe2.mp4 — mostrar...')\n"
+            "- Não invente cenas que não existem nos clipes disponíveis\n"
+        )
+        logger.info("Roteiro com %d clipes disponíveis para %s", len(clipes), produto.id)
+    else:
+        secao_clipes = ""
+        instrucao_clipes = "- Descreva cortes visuais genéricos para cada trecho\n"
 
-    for modelo in modelos:
-        for tentativa in range(3):
-            try:
-                resp = client.models.generate_content(
-                    model=modelo,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.8,
-                    ),
-                )
-                texto = resp.text or ""
-                if texto:
-                    dados = json.loads(texto)
-                    if "locucao" not in dados:
-                        raise ValueError("JSON sem chave 'locucao'")
-                    # garante comentário com o número do produto
-                    dados["comentario_fixo"] = dados.get("comentario_fixo", "").replace(
-                        "NN", produto.id.replace("#", "")
-                    )
-                    return dados
-            except json.JSONDecodeError:
-                logger.warning("JSON inválido de %s, tentando de novo", modelo)
-            except Exception as exc:  # 429/5xx → backoff
-                if "429" in str(exc) or "500" in str(exc) or "503" in str(exc):
-                    time.sleep(2 ** tentativa * 2)
-                    continue
-                logger.warning("Modelo %s falhou: %s", modelo, str(exc)[:150])
-                break  # próximo modelo
+    user_prompt = _USER_ROTEIRO.format(
+        nome=produto.nome,
+        dor=dor,
+        gancho=gancho,
+        num=num,
+        secao_clipes=secao_clipes,
+        instrucao_clipes=instrucao_clipes,
+    )
+
+    try:
+        texto = _chamar_gemini(
+            system_prompt=_SYSTEM_ROTEIRO,
+            user_prompt=user_prompt,
+            temperature=0.8,
+            response_mime_type="application/json",
+        )
+        dados = json.loads(texto)
+        if "locucao" not in dados:
+            raise ValueError("JSON sem chave 'locucao'")
+        if "comentario_fixo" in dados:
+            dados["comentario_fixo"] = dados["comentario_fixo"].replace("NN", num)
+        # registra se foi gerado com clipes reais
+        dados["_meta"] = {"com_clipes": bool(clipes), "n_clipes": len(clipes)}
+        return dados
+    except json.JSONDecodeError as exc:
+        logger.warning("JSON inválido do Gemini: %s", exc)
+    except Exception as exc:
+        logger.error("Gemini falhou ao gerar roteiro para %s: %s", produto.id, exc)
 
     return None

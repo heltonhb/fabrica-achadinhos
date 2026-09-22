@@ -49,6 +49,9 @@ COLUNAS = [
     "ID", "Status", "Data Postagem", "Nome do Produto", "Nicho",
     "Preco Medio (R$)", "Comissao Est (R$)", "Link Afiliado Shopee",
     "Link Vitrine (Bio)", "Pasta Midias", "Roteiro / Gancho", "Post Agendado",
+    "Prompt Criativo", "Observacoes", "Media ID Instagram",
+    # ── métricas de desempenho (preenchidas após postar) ──────────────────
+    "Comentarios QUERO", "Alcance", "Salvamentos", "Nota Manual",
 ]
 
 
@@ -67,9 +70,39 @@ class Produto:
     pasta_midias: str = ""
     gancho: str = ""
     post_agendado: str = "Nao"
-
-    # preenchidos pelo pipeline (não estão no CSV)
+    # campos gerados pelo pipeline / app (não estão no CSV base)
+    prompt_criativo: str = ""
+    observacoes: str = ""
+    media_id_instagram: str = ""
+    # métricas de desempenho (preenchidas após postar)
+    comentarios_quero: str = ""   # quantos comentaram "QUERO"
+    alcance: str = ""             # impressões / alcance do post
+    salvamentos: str = ""         # número de salvamentos
+    nota_manual: str = ""         # sua nota subjetiva 1-5
     roteiro: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "ID": self.id,
+            "Status": self.status,
+            "Data Postagem": self.data_postagem,
+            "Nome do Produto": self.nome,
+            "Nicho": self.nicho,
+            "Preco Medio (R$)": self.preco,
+            "Comissao Est (R$)": self.comissao,
+            "Link Afiliado Shopee": self.link_afiliado,
+            "Link Vitrine (Bio)": self.link_vitrine,
+            "Pasta Midias": self.pasta_midias,
+            "Roteiro / Gancho": self.gancho,
+            "Post Agendado": self.post_agendado,
+            "Prompt Criativo": self.prompt_criativo,
+            "Observacoes": self.observacoes,
+            "Media ID Instagram": self.media_id_instagram,
+            "Comentarios QUERO": self.comentarios_quero,
+            "Alcance": self.alcance,
+            "Salvamentos": self.salvamentos,
+            "Nota Manual": self.nota_manual,
+        }
 
     @property
     def slug(self) -> str:
@@ -124,6 +157,13 @@ def ler_produtos(csv_path: Path | None = None) -> list[Produto]:
                 pasta_midias=(linha.get("Pasta Midias") or "").strip(),
                 gancho=(linha.get("Roteiro / Gancho") or "").strip(),
                 post_agendado=(linha.get("Post Agendado") or "Nao").strip(),
+                prompt_criativo=(linha.get("Prompt Criativo") or "").strip(),
+                observacoes=(linha.get("Observacoes") or "").strip(),
+                media_id_instagram=(linha.get("Media ID Instagram") or "").strip(),
+                comentarios_quero=(linha.get("Comentarios QUERO") or "").strip(),
+                alcance=(linha.get("Alcance") or "").strip(),
+                salvamentos=(linha.get("Salvamentos") or "").strip(),
+                nota_manual=(linha.get("Nota Manual") or "").strip(),
             )
             if p.id:
                 prods.append(p)
@@ -134,14 +174,10 @@ def salvar_produtos(prods: list[Produto], csv_path: Path | None = None) -> None:
     """Salva a lista de produtos de volta no CSV (planilha local)."""
     path = csv_path or CSV_PATH
     with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(COLUNAS)
+        w = csv.DictWriter(f, fieldnames=COLUNAS)
+        w.writeheader()
         for p in prods:
-            w.writerow([
-                p.id, p.status, p.data_postagem, p.nome, p.nicho,
-                p.preco, p.comissao, p.link_afiliado, p.link_vitrine,
-                p.pasta_midias or f"Midias/{p.slug}", p.gancho, p.post_agendado,
-            ])
+            w.writerow(p.to_dict())
 
 
 def carregar_env() -> dict[str, str]:
