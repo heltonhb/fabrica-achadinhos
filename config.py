@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -214,7 +215,31 @@ def carregar_env() -> dict[str, str]:
 
 
 ENV = carregar_env()
-GEMINI_API_KEY = ENV.get("GEMINI_API_KEY", "")
+
+
+def _segredo_streamlit(chave: str) -> str:
+    """Lê .streamlit/secrets.toml (Streamlit Community Cloud), se disponível.
+
+    Só consulta o streamlit já importado (roda sob `streamlit run`);
+    scripts de linha de comando não pagam o custo de importá-lo.
+    """
+    st = sys.modules.get("streamlit")
+    if st is None:
+        return ""
+    try:
+        return str(st.secrets.get(chave, "")).strip()
+    except Exception:
+        return ""
+
+
+def obter_segredo(chave: str) -> str:
+    """Resolve um segredo na ordem: variável de ambiente → .env → st.secrets."""
+    return (
+        (os.environ.get(chave) or "").strip()
+        or (ENV.get(chave) or "").strip()
+        or _segredo_streamlit(chave)
+    )
+GEMINI_API_KEY = obter_segredo("GEMINI_API_KEY")
 
 if __name__ == "__main__":
     # autoteste rápido: python config.py

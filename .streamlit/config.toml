@@ -1,0 +1,6 @@
+# Configuração do Streamlit (local e nuvem)
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

@@ -94,8 +94,9 @@ A coluna `Media ID Instagram` da planilha mapeia post → link.
 Copie `.env.example` para `.env` e preencha:
 - `GEMINI_API_KEY` — API key do Google AI Studio
 - `GOOGLE_SHEETS_ID` — ID da planilha Google Sheets
-- `GOOGLE_SHEET_NAME` — nome da aba (padrão: `achados`)
-- `OAUTH_CLIENT_JSON` — arquivo de credenciais OAuth2
+- `GOOGLE_SHEET_NAME` — nome da aba (padrão: `Produtos`)
+- `GOOGLE_TOKEN_JSON` — conteúdo do token OAuth2 (opcional; localmente o
+  arquivo `.google_token.json` gerado por `python auth.py` basta)
 
 ## Arquivos principais
 
@@ -119,3 +120,35 @@ Copie `.env.example` para `.env` e preencha:
 | Doc | Status |
 |-----|--------|
 | [`docs/PLANO_VITRINE.md`](docs/PLANO_VITRINE.md) | Planejado — vitrine estática na Vercel (não implementado) |
+
+
+## Na nuvem (Streamlit Community Cloud — grátis)
+
+O app não precisa mais de ffmpeg (o render é no Google Vids), então roda em
+qualquer host Streamlit:
+
+1. `git push` no GitHub (repo `heltonhb/fabrica-achadinhos`).
+2. [share.streamlit.io](https://share.streamlit.io) → *Sign in with GitHub* →
+   *Deploy an app* → repositório `fabrica-achadinhos`, branch `main`, arquivo
+   `app.py`.
+3. *Settings → Secrets* (TOML):
+
+   ```toml
+   GEMINI_API_KEY = "sua-chave"
+   GOOGLE_SHEETS_ID = "1gckCWB0OzPQRgAMaMGj4J9wW48Ux8EDRcRNcRmR2Mq4"
+   GOOGLE_SHEET_NAME = "Produtos"
+   GOOGLE_TOKEN_JSON = '''{"token": "...", "refresh_token": "...", ...}'''
+   ```
+
+   O `GOOGLE_TOKEN_JSON` é o conteúdo do `.google_token.json` gerado por
+   `python auth.py`. Segredos são resolvidos na ordem: variável de ambiente →
+   `.env` → `st.secrets`.
+
+Observações:
+
+- Disco efêmero: `Produtos/`, `Midias/` e os caches do pipeline são recriados
+  a cada redeploy — a planilha é a fonte de verdade e os arquivos regeneram.
+- Sem `GOOGLE_TOKEN_JSON` o app sobe em modo leitura (a leitura da planilha é
+  pública via export CSV).
+- `webhook_insta.py` (porta 8000) é outro serviço: publicação automática no
+  Instagram exige um host separado com URL pública (VPS/Render).

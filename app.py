@@ -204,7 +204,10 @@ with st.sidebar:
     if sheets_ok:
         st.success("🟢 Google Sheets: sincronizando")
     else:
-        st.warning("🟡 Google Sheets: somente leitura (configure OAUTH_CLIENT_JSON)")
+        st.warning(
+            "🟡 Google Sheets: somente leitura (rode `python auth.py`; "
+            "na nuvem, defina o secret GOOGLE_TOKEN_JSON)"
+        )
     st.markdown(f"**Produtos:** {len(st.session_state.produtos)}")
     st.divider()
     st.markdown("#### Como usar")

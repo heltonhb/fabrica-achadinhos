@@ -8,6 +8,7 @@ __pycache__/
 # Variáveis sensíveis
 .env
 .google_token.json
+.streamlit/secrets.toml
 client_secret_*.json
 
 # Sistema

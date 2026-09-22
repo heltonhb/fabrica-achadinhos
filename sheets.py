@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from config import (
     Produto,
     carregar_env,
     ler_csv_local,
+    obter_segredo,
     produto_de_linha,
     salvar_csv_local,
     validar_ids_unicos,
@@ -33,12 +35,14 @@ logger = logging.getLogger(__name__)
 ENV = carregar_env()
 
 # ID da planilha (extraído da URL)
-SPREADSHEET_ID = ENV.get(
-    "GOOGLE_SHEETS_ID",
-    "1gckCWB0OzPQRgAMaMGj4J9wW48Ux8EDRcRNcRmR2Mq4",
+SPREADSHEET_ID = (
+    obter_segredo("GOOGLE_SHEETS_ID")
+    or "1gckCWB0OzPQRgAMaMGj4J9wW48Ux8EDRcRNcRmR2Mq4"
 )
-SHEET_NAME = ENV.get("GOOGLE_SHEET_NAME", "achados")  # aba da planilha
-OAUTH_CLIENT_JSON = ENV.get("OAUTH_CLIENT_JSON", "")
+SHEET_NAME = obter_segredo("GOOGLE_SHEET_NAME") or "Produtos"  # aba da planilha
+# Token OAuth2 como conteúdo (secret/variável) — na nuvem não existe arquivo local
+GOOGLE_TOKEN_JSON = obter_segredo("GOOGLE_TOKEN_JSON")
+_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # URL base para export CSV (leitura pública)
 _EXPORT_URL = (
@@ -50,53 +54,99 @@ _sheets_service = None
 _TOKEN_PATH = BASE_DIR / ".google_token.json"
 
 
+def _info_token() -> dict | None:
+    """Token OAuth2 como dict: arquivo local `.google_token.json` ou
+    conteúdo do secret/variável `GOOGLE_TOKEN_JSON` (nuvem)."""
+    if _TOKEN_PATH.exists():
+        try:
+            return json.loads(_TOKEN_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Token local ilegível (%s); tentando secret", exc)
+
+    valor = GOOGLE_TOKEN_JSON.strip()
+    if not valor:
+        return None
+    if valor.startswith("{"):
+        origem, bruto = "GOOGLE_TOKEN_JSON", valor
+    else:
+        caminho = Path(valor).expanduser()
+        if not caminho.exists():
+            logger.warning(
+                "GOOGLE_TOKEN_JSON aponta para arquivo inexistente: %s", valor
+            )
+            return None
+        try:
+            origem, bruto = str(caminho), caminho.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Falha ao ler %s: %s", caminho, exc)
+            return None
+    try:
+        return json.loads(bruto)
+    except json.JSONDecodeError as exc:
+        logger.warning("%s inválido: %s", origem, exc)
+        return None
+
+
+def _carregar_credenciais():
+    """Credenciais válidas (renova token expirado), ou None (somente leitura).
+
+    Sem fluxo OAuth interativo: um servidor headless não tem navegador.
+    O caminho de (re)gerar o token é `python auth.py`, localmente.
+    """
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+
+    info = _info_token()
+    if not info:
+        return None
+    try:
+        creds = Credentials.from_authorized_user_info(info, _SCOPES)
+    except (ValueError, KeyError) as exc:
+        logger.warning("Token OAuth2 inválido: %s", exc)
+        return None
+
+    if creds.valid:
+        return creds
+    if creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            _TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+            return creds
+        except Exception as exc:
+            logger.warning("Falha ao renovar token OAuth2: %s", exc)
+            return None
+    logger.warning(
+        "Token OAuth2 sem refresh_token válido — rode `python auth.py` "
+        "localmente e, na nuvem, atualize o secret GOOGLE_TOKEN_JSON"
+    )
+    return None
+
+
 def _get_sheets_service():
     """Retorna serviço autenticado da Google Sheets API (OAuth2 desktop)."""
     global _sheets_service
     if _sheets_service is not None:
         return _sheets_service
 
-    if not OAUTH_CLIENT_JSON:
+    try:
+        creds = _carregar_credenciais()
+    except ImportError:
+        logger.warning("google-auth/google-api-client não instalados")
         return None
-
-    sa_path = Path(OAUTH_CLIENT_JSON).expanduser()
-    if not sa_path.exists():
-        logger.warning("OAUTH_CLIENT_JSON não encontrado: %s", sa_path)
+    if creds is None:
         return None
 
     try:
-        from google.oauth2.credentials import Credentials
-        from google_auth_oauthlib.flow import InstalledAppFlow
-        from google.auth.transport.requests import Request
         from googleapiclient.discovery import build
 
-        SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = None
-
-        # tenta carregar token salvo
-        if _TOKEN_PATH.exists():
-            creds = Credentials.from_authorized_user_file(str(_TOKEN_PATH), SCOPES)
-
-        # se não tem token ou expirou, faz o fluxo OAuth
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(str(sa_path), SCOPES)
-                # tenta local_server; se falhar (headless), usa console
-                try:
-                    creds = flow.run_local_server(port=0)
-                except Exception:
-                    creds = flow.run_console()
-            # salva o token pra próximas vezes
-            _TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
-            logger.info("Token OAuth2 salvo em %s", _TOKEN_PATH)
-
-        _sheets_service = build("sheets", "v4", credentials=creds)
+        _sheets_service = build(
+            "sheets", "v4", credentials=creds, cache_discovery=False
+        )
         logger.info("Google Sheets API autenticada via OAuth2")
         return _sheets_service
     except Exception as exc:
         logger.error("Falha ao autenticar Google Sheets API: %s", exc)
+        _sheets_service = None
         return None
 
 
