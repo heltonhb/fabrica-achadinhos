@@ -84,7 +84,9 @@ Responda APENAS com JSON válido (sem markdown):
 }}"""
 
     try:
-        resposta = _chamar_gemini(_SYSTEM_LEGENDA, user, temperature=0.5)
+        resposta = _chamar_gemini(
+            _SYSTEM_LEGENDA, user, temperature=0.5, response_mime_type="application/json"
+        )
         # tenta extrair JSON
         # remove markdown code block se tiver
         limpo = resposta.strip()

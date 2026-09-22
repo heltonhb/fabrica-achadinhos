@@ -144,6 +144,57 @@ def test_429_em_todos_modelos_espera_uma_vez_e_repete(monkeypatch):
     assert sleeps == [5.0]                              # espera coletiva única
 
 
+def test_validar_saida_texto_puro_e_vazio():
+    assert gc._validar_saida("olá", None) == "olá"
+    assert gc._validar_saida("", "application/json") is None
+    assert gc._validar_saida("não é json", "application/json") is None
+
+
+def test_validar_saida_repara_virgula_final():
+    texto = '{"locucao": "oi", "hashtags": ["a",],}'
+    out = gc._validar_saida(texto, "application/json")
+    assert out is not None
+    import json as _json
+    assert _json.loads(out)["locucao"] == "oi"
+
+
+def test_validar_saida_repara_fences_markdown():
+    texto = '```json\n{"texto": "legenda"}\n```'
+    out = gc._validar_saida(texto, "application/json")
+    assert out is not None
+    import json as _json
+    assert _json.loads(out)["texto"] == "legenda"
+
+
+def test_chamar_gemini_json_invalido_repete_ate_valido(monkeypatch):
+    """JSON irrecuperável deve contar como resposta ruim e ser tentado de novo."""
+    monkeypatch.setattr(gc, "GEMINI_API_KEY", "k")
+    monkeypatch.setattr(gc.time, "sleep", lambda _s: None)
+
+    class _Models:
+        def __init__(self):
+            self.calls = 0
+
+        def generate_content(self, **_kwargs):
+            self.calls += 1
+            class R:
+                text = "claramente nao é json" if self.calls == 1 else '{"ok": true}'
+            return R()
+
+    models = _Models()
+
+    class _Client:
+        def __init__(self, api_key=None):
+            self.models = models
+
+    monkeypatch.setattr(gc.genai, "Client", _Client)
+    out = gc._chamar_gemini(
+        "sys", "user", response_mime_type="application/json", modelos=["m1"]
+    )
+    assert out == '{"ok": true}'
+    assert models.calls >= 2
+
+
 def test_dica_retry_429_extraia_segundos():
     assert gc._dica_retry_429("429 ... Please retry in 33.104s.") == pytest.approx(33.104)
     assert gc._dica_retry_429("429 RESOURCE_EXHAUSTED sem dica") is None

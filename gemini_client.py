@@ -14,6 +14,7 @@ Estratégia de resiliência (baseada em falhas reais da free tier):
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -61,6 +62,50 @@ def _espera_recoveravel(tentativa: int, msg: str) -> float | None:
         return None
     # 1.5, 3, 6, 12… (503 costuma ceder com mais tentativas)
     return min(_ESPERA_MAX_S, _ESPERA_BASE_S * (2 ** tentativa))
+
+
+def _reparar_json(texto: str) -> str | None:
+    """Tenta normalizar JSON malformado (fences markdown, vírgula final).
+
+    Retorna o JSON re-serializado ou None se irrecuperável.
+    """
+    t = texto.strip()
+    base = [t]
+    m = re.search(r"```(?:json)?\s*(.*?)```", t, re.DOTALL | re.IGNORECASE)
+    if m:
+        base.append(m.group(1).strip())
+    ini, fim = t.find("{"), t.rfind("}")
+    if ini != -1 and fim > ini:
+        base.append(t[ini:fim + 1])
+
+    candidatos: list[str] = []
+    for b in base:
+        candidatos.append(b)
+        candidatos.append(re.sub(r",\s*([\]}])", r"\1", b))  # vírgula final
+
+    for c in candidatos:
+        try:
+            return json.dumps(json.loads(c), ensure_ascii=False)
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return None
+
+
+def _validar_saida(texto: str, response_mime_type: str | None) -> str | None:
+    """Valida a resposta antes de devolver. Para JSON, repara o que der.
+
+    Retorna None se a resposta estiver vazia ou for JSON irrecuperável
+    (nesse caso o chamador tenta de novo).
+    """
+    if not texto:
+        return None
+    if response_mime_type != "application/json":
+        return texto
+    try:
+        json.loads(texto)
+        return texto
+    except json.JSONDecodeError:
+        return _reparar_json(texto)
 
 
 def _dica_retry_429(msg: str) -> float | None:
@@ -135,12 +180,19 @@ def _chamar_gemini(
                         config=types.GenerateContentConfig(**config_kwargs),
                     )
                     texto = (resp.text or "").strip()
-                    if texto:
-                        return texto
-                    # 200 sem texto (safety / corte) → tenta de novo
+                    validado = _validar_saida(texto, response_mime_type)
+                    if validado:
+                        return validado
+                    # 200 sem texto (safety / corte) ou JSON inválido → tenta de novo
                     só_429 = False
-                    ultimo_erro = f"{modelo}: resposta vazia"
-                    logger.warning("Gemini %s devolveu texto vazio (tentativa %d)", modelo, tentativa + 1)
+                    if texto and response_mime_type == "application/json":
+                        ultimo_erro = f"{modelo}: JSON inválido na resposta"
+                        logger.warning(
+                            "Gemini %s devolveu JSON irrecuperável (tentativa %d)", modelo, tentativa + 1
+                        )
+                    else:
+                        ultimo_erro = f"{modelo}: resposta vazia"
+                        logger.warning("Gemini %s devolveu texto vazio (tentativa %d)", modelo, tentativa + 1)
                 except Exception as exc:  # noqa: BLE001
                     msg = str(exc)
                     ultimo_erro = f"{modelo}: {msg}"
