@@ -125,6 +125,9 @@ def _chamar_gemini(
     temperature: float = 0.8,
     response_mime_type: str | None = None,
     modelos: list[str] | None = None,
+    prazo_total_s: float | None = None,
+    esperar_janela_429: bool = True,
+    ferramentas_google: bool = False,
 ) -> str:
     """Chama o Gemini e retorna o texto gerado.
 
@@ -134,6 +137,12 @@ def _chamar_gemini(
         temperature: Criatividade da resposta (0.0 – 1.0).
         response_mime_type: Se ``"application/json"``, força saída JSON.
         modelos: Lista de modelos a tentar, em ordem. Usa MODELOS_PADRAO se omitido.
+        prazo_total_s: Prazo máximo desta chamada (padrão PRAZO_TOTAL_S).
+        esperar_janela_429: Se False, não espera a janela de cota quando todos
+            os modelos dão 429 — falha rápido (chamadas curtas de UI).
+        ferramentas_google: Ativa o grounding com a busca do Google. O JSON é
+            pedido no prompt (JSON mode não combina com grounding) e a saída
+            continua sendo validada/reparada como JSON.
 
     Returns:
         Texto gerado pelo modelo (já com .strip()).
@@ -153,9 +162,10 @@ def _chamar_gemini(
     ultimo_erro = "sem tentativa"
     inicio = time.monotonic()
     dica_429: float | None = None  # menor "retry in Ns" visto na rodada 0
+    prazo = PRAZO_TOTAL_S if prazo_total_s is None else float(prazo_total_s)
 
     def _prazo_ok(extra: float = 0.0) -> bool:
-        return time.monotonic() - inicio + extra <= PRAZO_TOTAL_S
+        return time.monotonic() - inicio + extra <= prazo
 
     for rodada in range(_RODADAS):
         só_429 = True  # todos os modelos falaram EXCLUSIVAMENTE com 429?
@@ -176,6 +186,13 @@ def _chamar_gemini(
                     }
                     if response_mime_type:
                         config_kwargs["response_mime_type"] = response_mime_type
+                    if ferramentas_google:
+                        config_kwargs["tools"] = [
+                            types.Tool(google_search=types.GoogleSearch())
+                        ]
+                        # JSON mode não é aceito junto com grounding — o JSON é
+                        # pedido no prompt e _validar_saida repara a saída.
+                        config_kwargs.pop("response_mime_type", None)
 
                     resp = client.models.generate_content(
                         model=modelo,
@@ -233,6 +250,7 @@ def _chamar_gemini(
         if (
             rodada == 0
             and só_429
+            and esperar_janela_429
             and dica_429 is not None
             and _prazo_ok(min(_ESPERA_429_MAX_S, dica_429))
         ):
@@ -245,7 +263,7 @@ def _chamar_gemini(
         break
 
     estourou = not _prazo_ok()
-    prazo_txt = f" (prazo total de {PRAZO_TOTAL_S:.0f}s estourado)" if estourou else ""
+    prazo_txt = f" (prazo total de {prazo:.0f}s estourado)" if estourou else ""
     raise RuntimeError(
         f"Gemini não respondeu em nenhum modelo disponível{prazo_txt}. Último erro: {ultimo_erro}"
     )

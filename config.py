@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -175,6 +176,16 @@ def validar_ids_unicos(prods: list[Produto]) -> None:
         if pid in vistos:
             raise ValueError(f"ID duplicado: {pid}")
         vistos.add(pid)
+
+
+def proximo_id(prods: list[Produto]) -> str:
+    """Próximo ID livre da planilha (ex.: [#03, #07] → "#08")."""
+    nums = []
+    for p in prods:
+        m = re.search(r"\d+", p.id or "")
+        if m:
+            nums.append(int(m.group()))
+    return f"#{(max(nums) if nums else 0) + 1:02d}"
 
 
 def ler_csv_local(csv_path: Path | None = None) -> list[Produto]:

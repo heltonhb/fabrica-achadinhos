@@ -20,7 +20,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sheets import Produto, ler_produtos, salvar_produtos, _get_sheets_service
-from config import ESTADOS
+from config import ESTADOS, proximo_id
 from prompts import (
     gerar_prompt_video,
     gerar_prompt_podcast,
@@ -30,7 +30,7 @@ from prompts import (
 )
 from roteirista import gerar_ganchos
 from midia import resumo_midia, gerar_links_busca, criar_pasta_midia, MIDIAS_DIR
-from scraping import extrair_de_url, baixar_todas_midias, baixar_urls_manuais
+from scraping import extrair_de_url, baixar_todas_midias, baixar_urls_manuais, extrair_cadastro
 from legenda import gerar_legenda, gerar_todas_legendas
 
 # ─── Configuração da página ──────────────────────────────────────────────────
@@ -324,18 +324,71 @@ if secao == "📋 Produtos":
 if secao == "➕ Novo Produto":
     st.subheader("Adicionar novo produto à planilha")
 
+    # limpeza pós-cadastro: acontece ANTES de os widgets do form serem
+    # instanciados neste run (regra do session_state do Streamlit).
+    if st.session_state.pop("cad_limpar_apos", False):
+        for _k in (
+            "cad_link", "novo_id", "novo_nome", "novo_nicho", "novo_preco",
+            "novo_gancho", "novo_link_af", "novo_link_vit", "novo_comissao",
+        ):
+            st.session_state[_k] = ""
+    _msg_cad = st.session_state.pop("cad_msg", None)
+    if _msg_cad:
+        st.success(_msg_cad)
+
+    # 1) link fora do form — o botão de extração lê o valor ao vivo
+    col_link, col_btn = st.columns([4, 1])
+    with col_link:
+        st.text_input(
+            "🔗 Link do produto Shopee (afiliado ou da vitrine)",
+            key="cad_link",
+            placeholder="https://s.shopee.com.br/… ou …-i.123.456",
+        )
+    with col_btn:
+        extrair_agora = st.button(
+            "🔗 Extrair dados", use_container_width=True,
+            help="Preenche ID, nome, nicho e preço a partir do link",
+        )
+
+    # 2) extração em camadas: Gemini+Google Search (nuvem) → navegador local
+    if extrair_agora:
+        link_atual = (st.session_state.get("cad_link") or "").strip()
+        if not link_atual:
+            st.warning("Cole o link do produto primeiro.")
+        else:
+            with st.spinner(
+                "Consultando nome, preço e nicho… "
+                "(nuvem leva ~10s; no PC local abre uma janela de navegador)"
+            ):
+                dados = extrair_cadastro(link_atual)
+            st.session_state["novo_link_af"] = link_atual
+            if not (st.session_state.get("novo_id") or "").strip():
+                st.session_state["novo_id"] = proximo_id(st.session_state.produtos)
+            if dados.get("erro"):
+                st.error(dados["erro"])
+            else:
+                st.session_state["novo_nome"] = dados.get("nome", "")
+                st.session_state["novo_nicho"] = dados.get("nicho", "")
+                st.session_state["novo_preco"] = dados.get("preco", "")
+                origem = (
+                    "busca do Google via IA" if dados["camada"] == "ia"
+                    else "navegador local"
+                )
+                st.success(f"✅ Extraído ({origem}): {dados['nome'][:70]}")
+
+    # 3) formulário — campos com key para receberem o auto-preenchimento
     with st.form("novo_produto"):
         c1, c2 = st.columns(2)
         with c1:
-            novo_id = st.text_input("ID (ex: #06)")
-            novo_nome = st.text_input("Nome do Produto")
-            novo_nicho = st.text_input("Nicho")
-            novo_preco = st.text_input("Preço Médio (R$)")
+            novo_id = st.text_input("ID (ex: #06)", key="novo_id")
+            novo_nome = st.text_input("Nome do Produto", key="novo_nome")
+            novo_nicho = st.text_input("Nicho", key="novo_nicho")
+            novo_preco = st.text_input("Preço Médio (R$)", key="novo_preco")
         with c2:
-            novo_gancho = st.text_area("Gancho / Roteiro", height=100)
-            novo_link_af = st.text_input("Link Afiliado Shopee")
-            novo_link_vit = st.text_input("Link Vitrine (Bio)")
-            novo_comissao = st.text_input("Comissão Est. (R$)")
+            novo_gancho = st.text_area("Gancho / Roteiro", height=100, key="novo_gancho")
+            novo_link_af = st.text_input("Link Afiliado Shopee", key="novo_link_af")
+            novo_link_vit = st.text_input("Link Vitrine (Bio)", key="novo_link_vit")
+            novo_comissao = st.text_input("Comissão Est. (R$)", key="novo_comissao")
 
         submitted = st.form_submit_button("➕ Adicionar produto")
         if submitted:
@@ -361,7 +414,8 @@ if secao == "➕ Novo Produto":
                     st.session_state.produtos.pop()
                     st.error(f"Falha ao salvar: {exc}")
                 else:
-                    st.success(f"✅ Produto {novo_id} adicionado!")
+                    st.session_state["cad_limpar_apos"] = True
+                    st.session_state["cad_msg"] = f"✅ Produto {novo_id} adicionado!"
                     st.rerun()
 
 # ─── SEÇÃO: Mídia (B-Roll de Fornecedores) ──────────────────────────────────

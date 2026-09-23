@@ -9,6 +9,7 @@ Salva em: Midias/#NN_Slug/ (clipes) e Midias/#NN_Slug/imagens/
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -17,6 +18,7 @@ from urllib.parse import urlparse
 import requests
 
 from config import MIDIAS_DIR
+from gemini_client import _chamar_gemini, _reparar_json
 
 _HEADERS = {
     "User-Agent": (
@@ -409,6 +411,163 @@ def baixar_todas_midias(dados: dict, slug: str) -> dict:
             resultado["imagens"].append(p)
 
     return resultado
+
+
+# ─── Cadastro (produto novo só com o link) ───────────────────────────────────
+
+def _normalizar_preco(txt) -> str:
+    """Reduz 'R$ 79,99' / '79.99' ao formato da planilha ('79,99')."""
+    if not txt:
+        return ""
+    m = re.search(r"(\d[\d.,]*)", str(txt))
+    if not m:
+        return ""
+    n = m.group(1)
+    if re.fullmatch(r"\d+\.\d{2}", n):   # 79.99 → 79,99
+        n = n.replace(".", ",")
+    return n
+
+
+def _cadastro_por_ia(url: str) -> dict | None:
+    """Camada 1 (nuvem): Gemini com busca do Google lê o índice da web.
+
+    A Shopee bloqueia acesso automatizado direto (API, página, leitores),
+    mas a página do produto está indexada no Google com nome, preço e
+    categoria — o grounding busca essa página e devolve os dados.
+    """
+    url_pesquisa = _resolve_short_url(url)
+    ids = _parse_shopee_url(url_pesquisa)
+    contexto = f" (itemid {ids[1]}, loja {ids[0]})" if ids else ""
+    sistema = (
+        "Você extrai dados de produtos Shopee para preencher uma planilha. "
+        "Responda SOMENTE com o JSON pedido — sem comentários, sem markdown."
+    )
+    pedido = (
+        f"Produto na Shopee: {url_pesquisa}{contexto}. "
+        "Use a busca do Google para localizar a página EXATA deste produto. "
+        'Responda apenas com: {"nome": "<nome curto do produto em português>", '
+        '"preco": "<preço médio atual, ex: 79,99>", '
+        '"nicho": "<categoria/nicho em português>"} '
+        'Use "" para o que não conseguir encontrar.'
+    )
+    texto = _chamar_gemini(
+        sistema, pedido,
+        temperature=0.2,
+        response_mime_type="application/json",
+        prazo_total_s=60.0,
+        esperar_janela_429=False,
+        ferramentas_google=True,
+    )
+    try:
+        dados = json.loads(texto)
+    except json.JSONDecodeError:
+        reparado = _reparar_json(texto)
+        if not reparado:
+            return None
+        dados = json.loads(reparado)
+    if not isinstance(dados, dict):
+        return None
+    return {
+        "nome": str(dados.get("nome") or "").strip(),
+        "nicho": str(dados.get("nicho") or "").strip(),
+        "preco": _normalizar_preco(dados.get("preco")),
+    }
+
+
+def _cadastro_navegador(url: str) -> dict | None:
+    """Camada 2 (local): abre uma janela real do Chrome no PC do usuário.
+
+    O desafio anti-bot da Shopee passa sozinho em navegador "humano"
+    (comprovado em testes), mas é instável — roda só como fallback e
+    apenas quando há tela (DISPLAY); na nuvem desiste na hora.
+    """
+    if not os.environ.get("DISPLAY"):
+        return None
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as pw:
+            nav = pw.chromium.launch(headless=False, args=["--no-sandbox"])
+            ctx = nav.new_context(locale="pt-BR")
+            page = ctx.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+            html = ""
+            # espera desafio passar + SPA renderizar (até ~24s)
+            for _ in range(12):
+                page.wait_for_timeout(2000)
+                html = page.content()
+                if "Ofertas incríveis" not in page.title() and re.search(
+                    r"R\$\s*[\d.]+,\d{2}", html
+                ):
+                    break
+            meta = dict(re.findall(
+                r'<meta[^>]*property="(og:title|og:description)"[^>]*content="([^"]*)"', html
+            ))
+            cats = page.eval_on_selector_all(
+                'a[href*="/categories/"]',
+                "els => els.map(e => e.textContent.trim()).filter(Boolean)",
+            )
+            nav.close()
+    except Exception as exc:  # noqa: BLE001 — fallback não pode quebrar o fluxo
+        print(f"[cadastro] navegador falhou: {exc}")
+        return None
+
+    nome = (meta.get("og:title") or "").strip()
+    if not nome or "Ofertas incríveis" in nome or "Shopee Brasil" in nome:
+        return None  # parou no desafio/captcha
+    precos = re.findall(r"R\$\s*[\d.]+,\d{2}", html)
+    return {
+        "nome": nome,
+        "nicho": (cats[-1].strip() if cats else ""),
+        "preco": _normalizar_preco(precos[0]) if precos else "",
+    }
+
+
+def extrair_cadastro(link: str) -> dict:
+    """Preenche nome/nicho/preço de um produto só a partir do link.
+
+    Camadas:
+      1. Gemini + busca do Google (roda na nuvem, sem tocar na Shopee);
+      2. navegador real no PC local (a janela abre e fecha sozinha).
+
+    Retorna sempre {"nome", "nicho", "preco", "camada", "erro"}:
+    "camada" diz de onde vieram os dados ("ia" | "navegador"); "erro"
+    explica a falha (campos vazios) quando nenhuma camada funcionar.
+    """
+    link = (link or "").strip()
+    if not link:
+        return {"nome": "", "nicho": "", "preco": "", "camada": "",
+                "erro": "Cole o link do produto primeiro."}
+
+    motivos: list[str] = []
+    achados: dict = {}
+    camada = ""
+
+    try:
+        ia = _cadastro_por_ia(link)
+    except Exception as exc:  # noqa: BLE001
+        ia = None
+        motivos.append(f"IA: {str(exc)[:110]}")
+    if ia and any(ia.get(k) for k in ("nome", "nicho", "preco")):
+        achados, camada = ia, "ia"
+    elif not motivos:
+        motivos.append("IA não achou o produto")
+
+    if not achados:
+        nav = _cadastro_navegador(link)
+        if nav and any(nav.get(k) for k in ("nome", "nicho", "preco")):
+            achados, camada = nav, "navegador"
+        else:
+            motivos.append("navegador local indisponível (nuvem ou captcha)")
+
+    if achados:
+        return {"nome": achados.get("nome", ""), "nicho": achados.get("nicho", ""),
+                "preco": achados.get("preco", ""), "camada": camada, "erro": ""}
+    return {"nome": "", "nicho": "", "preco": "", "camada": "",
+            "erro": "⚠️ Extração indisponível agora — preencha os campos à mão. "
+                    "Causas: " + " · ".join(motivos)}
 
 
 # ─── Roteador ────────────────────────────────────────────────────────────────
