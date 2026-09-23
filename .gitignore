@@ -9,6 +9,7 @@ __pycache__/
 .env
 .google_token.json
 .streamlit/secrets.toml
+secrets_nuvem.toml
 client_secret_*.json
 
 # Sistema
