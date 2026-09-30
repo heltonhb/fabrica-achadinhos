@@ -1,12 +1,20 @@
-"""Testes do webhook Instagram: verify, payload de comentário e lookup de link."""
+"""Testes do webhook Instagram: verify, payload de comentário, background tasks e lookup com cache."""
 
 from __future__ import annotations
 
+import time
 import pytest
 from fastapi.testclient import TestClient
 
 import webhook_insta as wh
 from config import Produto
+
+
+@pytest.fixture(autouse=True)
+def reset_cache_webhook():
+    wh.limpar_cache()
+    yield
+    wh.limpar_cache()
 
 
 @pytest.fixture
@@ -151,3 +159,59 @@ class TestBuscarLink:
         monkeypatch.setattr(wh, "ler_produtos", _explode)
         monkeypatch.setenv("LINK_VITRINE_PADRAO", "https://bio/safe")
         assert wh.buscar_link_por_media_id("m1") == "https://bio/safe"
+
+
+class TestCacheWebhook:
+    def test_cache_evita_chamadas_repetidas(self, monkeypatch):
+        chamadas = 0
+
+        def _mock_ler():
+            nonlocal chamadas
+            chamadas += 1
+            return [Produto(id="#01", media_id_instagram="m1", link_afiliado="https://shopee/1")]
+
+        monkeypatch.setattr(wh, "ler_produtos", _mock_ler)
+        wh.limpar_cache()
+
+        link1 = wh.buscar_link_por_media_id("m1")
+        link2 = wh.buscar_link_por_media_id("m1")
+        assert link1 == "https://shopee/1"
+        assert link2 == "https://shopee/1"
+        assert chamadas == 1
+
+    def test_cache_respeita_ttl(self, monkeypatch):
+        chamadas = 0
+
+        def _mock_ler():
+            nonlocal chamadas
+            chamadas += 1
+            return [Produto(id="#01", media_id_instagram="m1", link_afiliado="https://shopee/1")]
+
+        monkeypatch.setattr(wh, "ler_produtos", _mock_ler)
+        wh.limpar_cache()
+
+        wh.buscar_link_por_media_id("m1")
+        assert chamadas == 1
+
+        # simula tempo decorrido maior que CACHE_TTL_SEGUNDOS
+        monkeypatch.setattr(wh, "_cache_timestamp", time.time() - (wh.CACHE_TTL_SEGUNDOS + 10))
+        wh.buscar_link_por_media_id("m1")
+        assert chamadas == 2
+
+    def test_limpar_cache_forca_releitura(self, monkeypatch):
+        chamadas = 0
+
+        def _mock_ler():
+            nonlocal chamadas
+            chamadas += 1
+            return [Produto(id="#01", media_id_instagram="m1", link_afiliado="https://shopee/1")]
+
+        monkeypatch.setattr(wh, "ler_produtos", _mock_ler)
+        wh.limpar_cache()
+
+        wh.buscar_link_por_media_id("m1")
+        assert chamadas == 1
+
+        wh.limpar_cache()
+        wh.buscar_link_por_media_id("m1")
+        assert chamadas == 2
