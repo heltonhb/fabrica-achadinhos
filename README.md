@@ -107,19 +107,25 @@ Copie `.env.example` para `.env` e preencha:
 | `pipeline.py` | Orquestrador (gancho → roteiro → pacote) |
 | `prompts.py` | Geração de prompts via Gemini |
 | `roteirista.py` | Ganchos e roteiro via Gemini |
-| `voz.py` | Locução TTS — legado do render local |
-| `render.py` | Composição ffmpeg — legado do render local |
 | `legenda.py` | Geração de legendas Instagram |
 | `midia.py` | Gerenciamento de mídia |
-| `scraping.py` | Extração de mídia de plataformas |
-| `webhook_insta.py` | Bot de comentários/DM |
+| `scraping.py` | Extração de mídia e dados de produtos |
+| `webhook_insta.py` | Bot assíncrono de comentários/DM (Meta Graph API) |
+| `scripts/gerar_vitrine.py` | Gerador da vitrine estática para Vercel |
 | `auth.py` | Autenticação OAuth2 Google |
+| `legacy/` | Módulos arquivados de composição local (FFmpeg/TTS) |
 
-## Planos
+## Vitrine Estática (Vercel)
 
-| Doc | Status |
-|-----|--------|
-| [`docs/PLANO_VITRINE.md`](docs/PLANO_VITRINE.md) | Planejado — vitrine estática na Vercel (não implementado) |
+A vitrine pública de achadinhos é gerada estaticamente para deploy gratuito na Vercel:
+
+```bash
+# Gerar vitrine local
+python scripts/gerar_vitrine.py
+```
+
+O arquivo `vercel.json` já está configurado para realizar o build automaticamente no deploy.
+Documentação: [`docs/PLANO_VITRINE.md`](docs/PLANO_VITRINE.md).
 
 
 ## Na nuvem (Streamlit Community Cloud — grátis)

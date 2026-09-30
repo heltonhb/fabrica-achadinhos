@@ -590,7 +590,7 @@ if secao == "🚀 Pipeline":
         opcoes = [f"{p.id} — {p.nome}" for p in st.session_state.produtos]
         idx = st.selectbox(
             "Produto:", range(len(opcoes)), format_func=lambda i: opcoes[i],
-            key="sel_render",
+            key="sel_pipeline",
         )
         p = st.session_state.produtos[idx]
 
@@ -611,11 +611,11 @@ if secao == "🚀 Pipeline":
                 st.error("Sem mídia ❌")
         with c3:
             st.markdown(f"**Estilo de roteiro:**")
-            estilo_render = st.selectbox(
+            estilo_pipeline = st.selectbox(
                 "Estilo",
                 list(ESTILOS.keys()),
                 format_func=lambda k: ESTILOS[k]["label"],
-                key="estilo_render",
+                key="estilo_pipeline",
                 label_visibility="collapsed",
             )
 
@@ -625,13 +625,13 @@ if secao == "🚀 Pipeline":
         with col_opt1:
             forcar = st.checkbox(
                 "Forçar regeneração (ignora arquivos já gerados)",
-                key="render_forcar",
+                key="pipeline_forcar",
             )
         with col_opt2:
             usar_ganchos = st.checkbox(
                 "Gerar 3 ganchos com Gemini (senão usa o da planilha)",
                 value=True,
-                key="render_ganchos",
+                key="pipeline_ganchos",
             )
 
         if st.button("🚀 Processar", type="primary", use_container_width=True):
@@ -643,17 +643,17 @@ if secao == "🚀 Pipeline":
                     res = processar_produto(
                         p,
                         forcar=forcar,
-                        estilo=estilo_render,
+                        estilo=estilo_pipeline,
                         usar_ganchos=usar_ganchos,
                     )
                 except Exception as exc:
-                    st.session_state.ultimo_render = {
+                    st.session_state.ultimo_pipeline = {
                         "id": p.id, "ok": False, "erro": str(exc), "log": [],
                     }
                     st.error(f"Falha no pipeline: {exc}")
                 else:
                     res["id"] = p.id
-                    st.session_state.ultimo_render = res
+                    st.session_state.ultimo_pipeline = res
                     # persiste status e dados na planilha
                     try:
                         salvar_produtos(st.session_state.produtos)
@@ -662,7 +662,7 @@ if secao == "🚀 Pipeline":
                     st.rerun()
 
         # resultado do último pipeline
-        ultimo = st.session_state.get("ultimo_render")
+        ultimo = st.session_state.get("ultimo_pipeline") or st.session_state.get("ultimo_render")
         if ultimo:
             st.divider()
             st.markdown(f"#### Resultado — `{ultimo.get('id', '?')}`")

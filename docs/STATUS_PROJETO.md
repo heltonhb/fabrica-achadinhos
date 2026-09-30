@@ -7,7 +7,7 @@
 
 ## 1. Visão Geral da Sessão
 
-Nesta sessão foi realizada uma avaliação crítica completa da arquitetura do projeto e a execução dos **Passos 1, 2 e 3** do plano de evolução:
+Nesta sessão foi realizada uma avaliação crítica completa da arquitetura do projeto e a execução dos **Passos 1, 2, 3 e 4** do plano de evolução:
 
 1. **Passo 1 — Robustez de Pipeline e Extração de Produtos:**
    - Commit: `5327d56` — `feat(pipeline): robustez na extração shopee, suporte a ganchos estruturados e novos testes`
@@ -24,12 +24,19 @@ Nesta sessão foi realizada uma avaliação crítica completa da arquitetura do 
    - 3 novos testes unitários adicionados em `tests/test_webhook.py`.
 
 3. **Passo 3 — Implementação da Vitrine Estática Própria (Vercel):**
+   - Commit: `7aceb7b` — `feat(vitrine): gerador de vitrine estática para Vercel, testes e configuração de build`
    - Gerador estático em `scripts/gerar_vitrine.py`: design responsivo, mobile-first, tema `#FFD600`, busca instantânea em tempo real e filtros de nicho em JavaScript puro (zero dependências pesadas).
    - Filtro de produtos elegíveis (com nome e link afiliado) e assinatura de links afiliados com `rel="noopener sponsored"`.
    - Busca e cópia automática de imagens de `Midias/{slug}/` para `vitrine/assets/{slug}.jpg` (priorizando imagens `main`).
    - Configuração de deploy da Vercel em `vercel.json` (`buildCommand` com build automático de `vitrine/index.html`).
-   - Resolução dinâmica da aba da planilha em `sheets.py` (evita falha se a aba chamar `achados` em vez de `Produtos`).
    - 8 novos testes em `tests/test_vitrine.py` cobrindo filtros, segurança XSS/escape, placeholders e build end-to-end.
+
+4. **Passo 4 — Higienização do Código Legado e Otimização de Dependências:**
+   - Arquivamento dos módulos de renderização local FFmpeg em `legacy/` (`render.py`, `voz.py`, `trilha.py`, `visual.py`, `teste_voz.py`, `fonts/`).
+   - Remoção de pastas vazias (`SFX/`, `Trilhas/`).
+   - Limpeza do `requirements.txt`: remoção de dependências pesadas desnecessárias no fluxo Google Vids (`edge-tts`, `numpy`, `scipy`, `Pillow`).
+   - Atualização de chaves e variáveis do Streamlit no `app.py` (`sel_pipeline`, `estilo_pipeline`, `ultimo_pipeline`).
+   - Redução drástica no tempo de instalação e build para deploys na Vercel e Streamlit Community Cloud.
 
 ---
 
@@ -39,20 +46,16 @@ Nesta sessão foi realizada uma avaliação crítica completa da arquitetura do 
 - **Ambiente de Testes:**
   ```bash
   .venv/bin/pytest -q
-  # Resultado: 92 passed, 3 warnings in ~2.1s
+  # Resultado: 92 passed, 3 warnings in ~2.2s
   ```
 
 ---
 
 ## 3. Próximos Passos (Para Retomar)
 
-### 🎯 Passo 4: Limpeza do Código Legado de Renderização Local
-- Mover ou arquivar arquivos legados de FFmpeg (`render.py`, `voz.py`, `trilha.py`, `visual.py`, `renders/`, `SFX/`, `Trilhas/`, `fonts/`).
-- Limpar `requirements.txt` retirando dependências pesadas não mais necessárias no fluxo Google Vids (`edge-tts`, `numpy`, `scipy`, `Pillow`).
-
 ### 🎯 Passo 5: Automação da Distribuição e Métricas
 - Integração de agendamento automático via Meta Graph API (Instagram Reels).
-- Sincronização periódica automática de métricas dos posts.
+- Sincronização periódica automática de métricas dos posts (alcance, comentários "QUERO", salvamentos).
 
 ---
 

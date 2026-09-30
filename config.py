@@ -18,11 +18,12 @@ from pathlib import Path
 # ─── Caminhos base ───────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent
 MIDIAS_DIR = BASE_DIR / "Midias"          # clipes brutos baixados manualmente
-PRODUTOS_DIR = BASE_DIR / "Produtos"      # roteiros, vozes, legendas, renders
-RENDERS_DIR = BASE_DIR / "renders"        # vídeos finais prontos para postar
-FONTS_DIR = BASE_DIR / "fonts"
+PRODUTOS_DIR = BASE_DIR / "Produtos"      # roteiros, prompts, pacotes de post
 CSV_PATH = BASE_DIR / "achados.csv"
 ENV_PATH = BASE_DIR / ".env"
+LEGACY_DIR = BASE_DIR / "legacy"
+FONTS_DIR = LEGACY_DIR / "fonts"
+RENDERS_DIR = BASE_DIR / "renders"
 
 # ─── Formato do vídeo ───────────────────────────────────────────────────────
 W, H = 1080, 1920
