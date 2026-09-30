@@ -1,13 +1,13 @@
 # 📌 Status do Projeto & Handover — Fábrica de Achadinhos
 
 > **Data de atualização:** 30/09/2026  
-> **Status:** 🟢 Estável / 84 testes passando (`pytest`) / Working tree limpa
+> **Status:** 🟢 Estável / 92 testes passando (`pytest`) / Working tree limpa
 
 ---
 
 ## 1. Visão Geral da Sessão
 
-Nesta sessão foi realizada uma avaliação crítica completa da arquitetura do projeto e a execução dos **Passos 1 e 2** do plano de evolução:
+Nesta sessão foi realizada uma avaliação crítica completa da arquitetura do projeto e a execução dos **Passos 1, 2 e 3** do plano de evolução:
 
 1. **Passo 1 — Robustez de Pipeline e Extração de Produtos:**
    - Commit: `5327d56` — `feat(pipeline): robustez na extração shopee, suporte a ganchos estruturados e novos testes`
@@ -21,48 +21,48 @@ Nesta sessão foi realizada uma avaliação crítica completa da arquitetura do 
    - Implementação de `BackgroundTasks` do FastAPI no endpoint `/webhook`: respostas à Meta em `< 50ms`, eliminando risco de timeout.
    - Cache em memória com TTL de 60s para leitura de produtos, suportando picos de tráfego sem sobrecarregar a Google Sheets API.
    - Timeouts explícitos (10s) nas requisições ao Facebook Graph API.
-   - 3 novos testes unitários adicionados em `tests/test_webhook.py` (total de 84 testes, 100% de aprovação).
+   - 3 novos testes unitários adicionados em `tests/test_webhook.py`.
+
+3. **Passo 3 — Implementação da Vitrine Estática Própria (Vercel):**
+   - Gerador estático em `scripts/gerar_vitrine.py`: design responsivo, mobile-first, tema `#FFD600`, busca instantânea em tempo real e filtros de nicho em JavaScript puro (zero dependências pesadas).
+   - Filtro de produtos elegíveis (com nome e link afiliado) e assinatura de links afiliados com `rel="noopener sponsored"`.
+   - Busca e cópia automática de imagens de `Midias/{slug}/` para `vitrine/assets/{slug}.jpg` (priorizando imagens `main`).
+   - Configuração de deploy da Vercel em `vercel.json` (`buildCommand` com build automático de `vitrine/index.html`).
+   - Resolução dinâmica da aba da planilha em `sheets.py` (evita falha se a aba chamar `achados` em vez de `Produtos`).
+   - 8 novos testes em `tests/test_vitrine.py` cobrindo filtros, segurança XSS/escape, placeholders e build end-to-end.
 
 ---
 
 ## 2. Estado Atual do Repositório
 
-- **Branch:** `main` (à frente de `origin/main` por 2 commits: `5327d56` e `ccc71ff`).
-- **Working Tree:** Limpa (`nothing to commit, working tree clean`).
+- **Branch:** `main`
 - **Ambiente de Testes:**
   ```bash
   .venv/bin/pytest -q
-  # Resultado: 84 passed, 3 warnings in ~1.9s
+  # Resultado: 92 passed, 3 warnings in ~2.1s
   ```
 
 ---
 
 ## 3. Próximos Passos (Para Retomar)
 
-### 🎯 Passo 3: Implementação da Vitrine Estática Própria (Vercel)
-Documentação de referência já pronta em: [`docs/PLANO_VITRINE.md`](PLANO_VITRINE.md).
-- **Entregáveis previstos:**
-  1. `scripts/gerar_vitrine.py`: script gerador de HTML responsivo, mobile-first, com tema `#FFD600`, busca rápida por nome/nicho e links com `rel="noopener sponsored"`.
-  2. `tests/test_vitrine.py`: testes do gerador (filtros de produtos sem link, escape de HTML, placeholders de imagens).
-  3. `vercel.json` e ajuste no `.gitignore` para build automático na Vercel.
-  4. Script de cópia/seed de imagens de produtos de `Midias/{slug}/` para `vitrine/assets/`.
-
 ### 🎯 Passo 4: Limpeza do Código Legado de Renderização Local
 - Mover ou arquivar arquivos legados de FFmpeg (`render.py`, `voz.py`, `trilha.py`, `visual.py`, `renders/`, `SFX/`, `Trilhas/`, `fonts/`).
 - Limpar `requirements.txt` retirando dependências pesadas não mais necessárias no fluxo Google Vids (`edge-tts`, `numpy`, `scipy`, `Pillow`).
 
+### 🎯 Passo 5: Automação da Distribuição e Métricas
+- Integração de agendamento automático via Meta Graph API (Instagram Reels).
+- Sincronização periódica automática de métricas dos posts.
+
 ---
 
-## 4. Como Retomar os Trabalhos
+## 4. Como Executar a Vitrine Localmente
 
-Quando voltar ao projeto:
-1. Verifique o status do git e rode a suíte de testes:
-   ```bash
-   git status
-   .venv/bin/pytest -q
-   ```
-2. Para subir os commits locais para o repositório remoto:
-   ```bash
-   git push origin main
-   ```
-3. Avance diretamente para a implementação da **Vitrine Estática (Passo 3)** seguindo [`docs/PLANO_VITRINE.md`](PLANO_VITRINE.md).
+```bash
+# Gerar a vitrine (lê do Google Sheets / fallback CSV local)
+.venv/bin/python scripts/gerar_vitrine.py
+
+# Visualizar no navegador
+xdg-open vitrine/index.html  # no Linux
+# ou abrir o arquivo vitrine/index.html no navegador
+```

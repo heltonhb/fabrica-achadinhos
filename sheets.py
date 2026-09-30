@@ -188,12 +188,30 @@ def _linha_produto(p: Produto) -> list[str]:
     return [d.get(col, "") for col in COLUNAS]
 
 
-def _ler_valores_sheets(service) -> list[list[str]]:
+def _obter_aba_alvo(service) -> str:
+    """Garante que a aba existe na planilha; se SHEET_NAME não existir, usa a primeira disponível."""
+    global SHEET_NAME
+    try:
+        meta = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID, fields="sheets.properties").execute()
+        abas = [s.get("properties", {}).get("title") for s in meta.get("sheets", []) if s.get("properties", {}).get("title")]
+        if SHEET_NAME in abas:
+            return SHEET_NAME
+        if abas:
+            logger.info("Aba '%s' não encontrada. Usando primeira aba existente: '%s'", SHEET_NAME, abas[0])
+            SHEET_NAME = abas[0]
+            return SHEET_NAME
+    except Exception as exc:
+        logger.warning("Falha ao consultar abas da planilha: %s", exc)
+    return SHEET_NAME
+
+
+def _ler_valores_sheets(service, aba: str | None = None) -> list[list[str]]:
     """Lê a aba atual via API (para mapear ID → número de linha)."""
+    nome_aba = aba or SHEET_NAME
     resp = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=SPREADSHEET_ID, range=f"'{SHEET_NAME}'")
+        .get(spreadsheetId=SPREADSHEET_ID, range=f"'{nome_aba}'")
         .execute()
     )
     return resp.get("values") or []
@@ -217,7 +235,8 @@ def _mapa_id_linha(valores: list[list[str]], id_col: int) -> dict[str, int]:
     return mapa
 
 
-def _sheet_id(service) -> int | None:
+def _sheet_id(service, aba: str | None = None) -> int | None:
+    nome_aba = aba or SHEET_NAME
     meta = (
         service.spreadsheets()
         .get(spreadsheetId=SPREADSHEET_ID, fields="sheets.properties")
@@ -225,7 +244,7 @@ def _sheet_id(service) -> int | None:
     )
     for s in meta.get("sheets", []):
         props = s.get("properties", {})
-        if props.get("title") == SHEET_NAME:
+        if props.get("title") == nome_aba:
             return props.get("sheetId")
     return None
 
@@ -242,13 +261,14 @@ def _sincronizar_para_sheets(prods: list[Produto]) -> bool:
         return False
 
     try:
-        valores = _ler_valores_sheets(service)
+        aba = _obter_aba_alvo(service)
+        valores = _ler_valores_sheets(service, aba)
 
         # aba vazia → grava cabeçalho e sai (primeira escrita)
         if not valores:
             service.spreadsheets().values().update(
                 spreadsheetId=SPREADSHEET_ID,
-                range=f"'{SHEET_NAME}'!A1",
+                range=f"'{aba}'!A1",
                 valueInputOption="RAW",
                 body={"values": [COLUNAS]},
             ).execute()
@@ -266,7 +286,7 @@ def _sincronizar_para_sheets(prods: list[Produto]) -> bool:
             if linha is not None:
                 updates.append(
                     {
-                        "range": f"'{SHEET_NAME}'!A{linha}",
+                        "range": f"'{aba}'!A{linha}",
                         "values": [_linha_produto(p)],
                     }
                 )
@@ -281,7 +301,7 @@ def _sincronizar_para_sheets(prods: list[Produto]) -> bool:
         if anexos:
             service.spreadsheets().values().append(
                 spreadsheetId=SPREADSHEET_ID,
-                range=f"'{SHEET_NAME}'",
+                range=f"'{aba}'",
                 valueInputOption="RAW",
                 insertDataOption="INSERT_ROWS",
                 body={"values": anexos},
@@ -293,9 +313,9 @@ def _sincronizar_para_sheets(prods: list[Produto]) -> bool:
             reverse=True,
         )
         if remover:
-            sid = _sheet_id(service)
+            sid = _sheet_id(service, aba)
             if sid is None:
-                logger.warning("Aba '%s' não encontrada — remoções não aplicadas", SHEET_NAME)
+                logger.warning("Aba '%s' não encontrada — remoções não aplicadas", aba)
             else:
                 service.spreadsheets().batchUpdate(
                     spreadsheetId=SPREADSHEET_ID,
@@ -317,10 +337,11 @@ def _sincronizar_para_sheets(prods: list[Produto]) -> bool:
                 ).execute()
 
         logger.info(
-            "Sync Sheets: %d atualizados, %d anexados, %d removidos",
+            "Sync Sheets: %d atualizados, %d anexados, %d removidos (aba: '%s')",
             len(updates),
             len(anexos),
             len(remover),
+            aba,
         )
         return True
     except Exception as exc:

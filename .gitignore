@@ -35,3 +35,10 @@ fonts/*.ttf
 # Temp
 *.tmp
 *.log
+
+# Vitrine estática (Vercel)
+vitrine/index.html
+!vitrine/assets/*.jpg
+!vitrine/assets/*.jpeg
+!vitrine/assets/*.webp
+!vitrine/assets/.gitkeep

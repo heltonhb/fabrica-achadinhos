@@ -1,7 +1,7 @@
 # Plano: Vitrine estática + Vercel
 
-> **Status:** planejado — **não implementado**.  
-> Implementar depois; este documento é a referência do acordado.
+> **Status:** ✅ **Implementado**.  
+> Gerador em `scripts/gerar_vitrine.py`, testes em `tests/test_vitrine.py`, deploy via `vercel.json`.
 
 ## Objetivo
 
