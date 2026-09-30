@@ -1,16 +1,22 @@
 """
-roteirista.py — Geração de gancho e roteiro de 20s via Gemini (JSON estruturado).
+roteirista.py — Geração de gancho e ROTEIRO DE REFERÊNCIA (em português) via Gemini.
+
+CONTRATO DE PROMPTS — ver prompts.py:
+  - Este módulo gera ROTEIRO DE REFERÊNCIA em português para o produto.
+    Ele NÃO é o prompt que vai para o Google Vids / gerador externo.
+  - O prompt de vídeo autocontido (em inglês, com descrição de cena) é
+    gerado por prompts.py e entregue na seção Gerar Prompt do app.
 
 Fluxo recomendado:
   1. gerar_ganchos(produto)  → 3 opções de gancho para o usuário escolher
-  2. gerar_roteiro(produto)  → roteiro JSON completo
+  2. gerar_roteiro(produto)  → roteiro JSON de referência (PT)
      Se produto.gancho já estiver preenchido (pelo usuário ou pelo passo 1),
      o roteiro o usa como âncora criativa.
      Se clipes estiverem disponíveis em Midias/, o Gemini adapta os cortes
      ao material real.
 
-Saída JSON do roteiro:
-  locucao            — texto exato da locução (≤60 palavras, ~17s)
+Saída JSON do roteiro de referência:
+  locucao            — texto sugerido da locução (≤60 palavras, ~17s)
   cortes             — lista descrevendo o que mostrar em cada trecho
   legenda            — caption para Instagram Reels / TikTok
   hashtags           — lista de hashtags (sem #)
@@ -120,9 +126,37 @@ def gerar_ganchos(produto: Produto) -> list[dict]:
             response_mime_type="application/json",
         )
         dados = json.loads(texto)
-        ganchos = dados.get("ganchos", [])
-        if not ganchos or not isinstance(ganchos, list):
+        if isinstance(dados, list):
+            ganchos_brutos = dados
+        elif isinstance(dados, dict):
+            ganchos_brutos = dados.get("ganchos", [])
+            if not ganchos_brutos and "texto" in dados:
+                ganchos_brutos = [dados]
+        else:
+            ganchos_brutos = []
+
+        if not ganchos_brutos or not isinstance(ganchos_brutos, list):
             raise ValueError("JSON sem chave 'ganchos' ou vazia")
+
+        angulos_padrao = ["dor", "surpresa", "economia"]
+        ganchos = []
+        for idx, g in enumerate(ganchos_brutos):
+            if isinstance(g, dict):
+                angulo = str(g.get("angulo") or angulos_padrao[idx % len(angulos_padrao)]).strip().lower()
+                texto_g = str(g.get("texto") or "").strip()
+                explicacao = str(g.get("explicacao") or "").strip()
+                if texto_g:
+                    ganchos.append({"angulo": angulo, "texto": texto_g, "explicacao": explicacao})
+            elif isinstance(g, str) and g.strip():
+                ganchos.append({
+                    "angulo": angulos_padrao[idx % len(angulos_padrao)],
+                    "texto": g.strip(),
+                    "explicacao": "",
+                })
+
+        if not ganchos:
+            raise ValueError("Nenhum gancho válido encontrado na resposta do Gemini")
+
         logger.info("Gerados %d ganchos para %s", len(ganchos), produto.id)
         return ganchos
     except json.JSONDecodeError as exc:

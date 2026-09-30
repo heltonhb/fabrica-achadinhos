@@ -22,7 +22,8 @@ import logging
 from dataclasses import replace as dc_replace
 from pathlib import Path
 
-from prompts import ESTILOS
+from prompts import ESTILOS, formatar_exemplos_para_prompt
+from metricas import obter_exemplos
 from roteirista import gerar_ganchos, gerar_roteiro
 from sheets import Produto, ler_produtos, salvar_produtos
 
@@ -41,9 +42,14 @@ def _escolher_gancho(ganchos: list[dict]) -> str:
     """
     for angulo in _ANGULO_PREFERIDO:
         for g in ganchos:
-            if g.get("angulo") == angulo:
+            if isinstance(g, dict) and g.get("angulo") == angulo and g.get("texto"):
                 return g["texto"]
-    return ganchos[0]["texto"] if ganchos else ""
+    if ganchos:
+        primeiro = ganchos[0]
+        if isinstance(primeiro, dict):
+            return primeiro.get("texto", "")
+        return str(primeiro)
+    return ""
 
 
 def processar_produto(
@@ -85,7 +91,12 @@ def processar_produto(
         if ganchos:
             gancho_texto = _escolher_gancho(ganchos)
             angulo = next(
-                (g["angulo"] for g in ganchos if g["texto"] == gancho_texto), "?"
+                (
+                    g.get("angulo", "?")
+                    for g in ganchos
+                    if isinstance(g, dict) and g.get("texto") == gancho_texto
+                ),
+                "?",
             )
             gancho_data = {
                 "texto": gancho_texto,
@@ -208,6 +219,9 @@ def _angulo_do_gancho(pasta: Path) -> str:
     return "manual"
 
 
+_USAR_EXEMPLOS_PADRAO = True  # few-shot de métricas ativo por padrão no pipeline
+
+
 def processar_lote(
     ids: list[str] | None = None,
     forcar: bool = False,
@@ -228,6 +242,29 @@ def processar_lote(
             resultados.append({"id": p.id, "ok": False, "erro": str(exc)})
     salvar_produtos(prods)
     return resultados
+
+
+def melhorar_prompt_video_com_metricas(
+    texto: str,
+    produtos: list[Produto],
+    nicho: str | None = None,
+    n: int = 3,
+) -> str:
+    """Injeta few-shot de posts com bom desempenho no prompt de vídeo.
+
+    Retorna texto com exemplos anexados, ou o texto original se não houver
+    métricas disponíveis ou se o prompt já estiver com exemplos.
+    """
+    exemplos = obter_exemplos(produtos, n=n, nicho=nicho)
+    if not exemplos:
+        logger.debug("Nenhum exemplo de desempenho disponible para few-shot")
+        return texto
+
+    exemplo_txt = formatar_exemplos_para_prompt(exemplos)
+    if exemplo_txt in texto:
+        return texto
+
+    return f"{exemplo_txt}\n\n{texto}"
 
 
 if __name__ == "__main__":

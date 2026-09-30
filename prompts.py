@@ -1,8 +1,42 @@
 """
-prompts.py — Geração de prompts via Gemini.
+prompts.py — Geração de prompts autocontidos para criativos externo (Google Vids, NotebookLM, carrossel).
 
-Cada prompt é gerado pelo Gemini com base nos dados do produto,
-resultando em textos mais específicos e criativos que templates genéricos.
+CONTRATO DE PROMPTS — Fábrica de Achadinhos
+=============================================
+
+Este módulo gera PROMPTS, não roteiros de locução em português.
+À diferença de roteirista.py (que produz roteiro de referência em PT),
+o prompt aqui é a entrega principal que vai para o gerador de vídeo/audio/design.
+
+Regras de contrato (válidas para todos os prompts de criativo):
+
+- Prompt de vídeo (Reels/TikTok):
+    * formato vertical 9:16, 1080x1920
+    * voz em português brasileiro, informal, sem emoji
+    * sem introdução ("Olá", "Ei pessoal") — direto ao gancho
+    * descrição cena a cena com tempo em segundos
+    * prompt em inglês, mas diálogo e texto na tela em português
+    * sem instrução de legendas (gerada separadamente em legenda.py)
+    * deve conter CTA final explícito
+
+- Prompt de podcast (NotebookLM):
+    * prompt autocontido em português
+    * duração alvo ~2-3 min
+    * tom conversacional entre amigos, sem venda agressiva
+
+- Prompt de carrossel:
+    * prompt autocontido em português
+    * slide a slide (5-7 slides)
+    * 1080x1080 ou 1080x1350, fundo escuro, texto branco/amarelo, fonte bold
+
+Validação:
+    * prompts de vídeo passam por uma checagem de presença de elementos
+      obrigatórios antes de serem considerados entregues na UI.
+
+Uso do few-shot (métricas):
+    * Quando houver posts com desempenho medido, o sistema pode injetar
+      os melhores como exemplo no prompt do vídeo.
+    * O few-shot é opcional e visível na seção Gerar Prompt.
 """
 
 from __future__ import annotations
@@ -25,6 +59,34 @@ def _gerar_com_fallback(fn, fallback: str, rotulo: str) -> tuple[str, str | None
     except Exception as exc:  # noqa: BLE001
         logger.error("Gemini falhou em %s: %s", rotulo, exc)
         return fallback, str(exc)
+
+
+# ─── Validação de contrato do prompt de vídeo ────────────────────────────────
+
+# Palavras/chaves que um prompt de vídeo deve conter para ser considerado
+# entregável válido. Não é schema rígido de JSON; é uma checagem de presença.
+_VIDEO_PROMPT_REQUISITOS = (
+    "vertical",            # formato 9:16 / vertical
+    "1080",               # resolução
+    "brazilian portuguese",
+    "portuguese",
+)
+
+
+def validar_prompt_video(texto: str) -> tuple[bool, list[str]]:
+    """Checa se um prompt de vídeo contém os elementos obrigatórios.
+
+    Retorna ``(ok, faltando)``.
+    """
+    t = texto.lower()
+    faltando = [r for r in _VIDEO_PROMPT_REQUISITOS if r not in t]
+    # presença de CTA é difícil de checar por regex genérico, mas uma heurística
+    # básica ajuda: palavras de chamada à ação costumam estar presentes.
+    cta_forte = any(p in t for p in ("cta", "call to action", "comenta", "comentar", "quero"))
+    avisos: list[str] = []
+    if not cta_forte:
+        avisos.append("possível CTA ausente no prompt de vídeo")
+    return (not faltando, faltando + avisos)
 
 
 @dataclass
@@ -226,6 +288,15 @@ Do NOT include subtitle/caption instructions (those are generated separately).""
         f"[ERRO GEMINI] Parte 2 — {plataforma_nome} — {nome}. Plot twist + CTA.",
         rotulo="Parte 2",
     )
+    # validação de contrato do prompt de vídeo (aviso, não bloqueia)
+    for parte, texto in [("Parte 1", texto_p1), ("Parte 2", texto_p2)]:
+        se_ok, faltando = validar_prompt_video(texto)
+        if not se_ok:
+            logger.warning(
+                "Prompt de vídeo (%s) para %s não atende ao contrato: %s",
+                parte, nome, "; ".join(faltando),
+            )
+
     if err_p1 or err_p2:
         logger.error(
             "Gemini falhou ao gerar prompt (%s): parte1=%s | parte2=%s",

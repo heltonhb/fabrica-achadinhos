@@ -27,3 +27,39 @@ def test_processar_produto_retorna_ok_com_pacote():
     assert '"video"' not in fonte
     # status só avança a partir de "Ideia" (não regride o manual)
     assert 'p.status = "Roteiro Pronto"' in fonte
+
+
+def test_escolher_gancho_com_dicts_e_strings():
+    # Lista com dicts normais
+    ganchos_dicts = [
+        {"angulo": "dor", "texto": "Gancho dor"},
+        {"angulo": "surpresa", "texto": "Gancho surpresa"},
+    ]
+    # surpresa é preferida conforme _ANGULO_PREFERIDO
+    assert pipeline._escolher_gancho(ganchos_dicts) == "Gancho surpresa"
+
+    # Lista apenas com strings
+    ganchos_strings = ["Texto puro 1", "Texto puro 2"]
+    assert pipeline._escolher_gancho(ganchos_strings) == "Texto puro 1"
+
+    # Lista vazia
+    assert pipeline._escolher_gancho([]) == ""
+
+
+def test_gerar_ganchos_com_strings(monkeypatch):
+    import roteirista
+    from config import Produto
+
+    p = Produto(id="#01", nome="Teste")
+    # Simula Gemini retornando array de strings
+    monkeypatch.setattr(
+        roteirista,
+        "_chamar_gemini",
+        lambda **kw: '{"ganchos": ["Gancho direto 1", "Gancho direto 2"]}',
+    )
+    res = roteirista.gerar_ganchos(p)
+    assert len(res) == 2
+    assert isinstance(res[0], dict)
+    assert res[0]["texto"] == "Gancho direto 1"
+    assert "angulo" in res[0]
+

@@ -33,67 +33,167 @@ _HEADERS = {
 # ─── Shopee ──────────────────────────────────────────────────────────────────
 
 def _resolve_short_url(url: str) -> str:
-    """Resolve links curtos (s.shopee.com.br) para a URL completa."""
-    if "s.shopee.com.br" in url or "shopee.link" in url:
+    """Resolve links curtos (s.shopee.com.br, shope.ee, shp.ee, shopee.link) para a URL completa."""
+    if not url:
+        return ""
+    curtos = ("s.shopee.com.br", "shope.ee", "shp.ee", "shopee.link")
+    if any(dom in url.lower() for dom in curtos):
         try:
             resp = requests.head(url, allow_redirects=True, timeout=10, headers=_HEADERS)
-            return resp.url
+            if resp.url and resp.url != url and "error" not in resp.url.lower():
+                return resp.url
+        except Exception:
+            pass
+        try:
+            resp = requests.get(url, allow_redirects=True, timeout=10, headers=_HEADERS, stream=True)
+            if resp.url and resp.url != url and "error" not in resp.url.lower():
+                return resp.url
+            if resp.status_code == 200:
+                texto_inicio = resp.raw.read(4096).decode("utf-8", errors="ignore")
+                m_meta = re.search(r'content=["\']\d+;\s*url=([^"\']+)["\']', texto_inicio, re.I)
+                if m_meta:
+                    return m_meta.group(1).strip()
         except Exception:
             pass
     return url
 
 
+def extrair_slug_shopee(url: str) -> str:
+    """Extrai o título legível do produto a partir do slug da URL."""
+    try:
+        from urllib.parse import unquote, urlparse
+        parsed = urlparse(url)
+        path = unquote(parsed.path).strip("/")
+        partes = [p for p in path.split("/") if p]
+        if not partes:
+            return ""
+        candidato = partes[-1]
+        if candidato.isdigit() and len(partes) > 1:
+            candidato = partes[-2]
+        # remove -i.shopid.itemid
+        limpo = re.sub(r"-i[\s.]+\d+[\s.]+\d+.*$", "", candidato)
+        nome = re.sub(r"[-_+]+", " ", limpo).strip()
+        if re.fullmatch(r"[\d\s]+", nome) or nome.lower() in ("product", "universal-link", "item", "x"):
+            return ""
+        return nome
+    except Exception:
+        return ""
+
+
+def _limpar_nome_produto(nome: str) -> str:
+    """Remove sufixos de SEO comuns da Shopee como '| Shopee Brasil', 'Frete Grátis', etc."""
+    if not nome:
+        return ""
+    nome = re.sub(r"\s*\|\s*Shopee Brasil.*$", "", nome, flags=re.I)
+    nome = re.sub(r"^\s*Compre\s+", "", nome, flags=re.I)
+    nome = re.sub(r"\s+na Shopee Brasil!.*$", "", nome, flags=re.I)
+    nome = re.sub(r"\[FRETE GR[ÁA]TIS\]", "", nome, flags=re.I)
+    nome = re.sub(r"\[PRONTA ENTREGA\]", "", nome, flags=re.I)
+    return nome.strip()
+
+
+def _limpar_url_imagem_shopee(url: str) -> str:
+    """Garante URL absoluta e remove sufixos de miniatura (_tn, _xxs, etc.) para resolução máxima."""
+    if not url:
+        return ""
+    if not url.startswith("http"):
+        url = f"https://down-br.img.susercontent.com/file/{url.lstrip('/')}"
+    # Remove sufixos como _tn, _xxs, _xs, _s, _m no final do hash da imagem
+    url = re.sub(r"(_(?:tn|xxs|xs|s|m|xl|xxl))(?:\.[a-zA-Z]+)?$", "", url)
+    return url
+
+
+def _extrair_shopee_ld_json(html: str) -> dict | None:
+    """Extrai dados estruturados schema.org (Product) embutidos no HTML."""
+    for m in re.finditer(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', html, re.DOTALL | re.I):
+        try:
+            dados = json.loads(m.group(1))
+            items = dados if isinstance(dados, list) else [dados]
+            for item in items:
+                if isinstance(item, dict) and item.get("@type") == "Product":
+                    nome = _limpar_nome_produto(item.get("name", ""))
+                    imgs = item.get("image", [])
+                    if isinstance(imgs, str):
+                        imgs = [imgs]
+                    imgs_limpas = [_limpar_url_imagem_shopee(i) for i in imgs if i]
+                    preco = ""
+                    offers = item.get("offers")
+                    if isinstance(offers, dict):
+                        preco = str(offers.get("price") or offers.get("lowPrice") or "")
+                    elif isinstance(offers, list) and offers:
+                        preco = str(offers[0].get("price") or "")
+                    return {
+                        "nome": nome,
+                        "imagens": [i for i in imgs_limpas if i],
+                        "preco": _normalizar_preco(preco),
+                        "descricao": item.get("description", ""),
+                    }
+        except (json.JSONDecodeError, Exception):
+            continue
+    return None
+
+
 def _parse_shopee_url(url: str) -> tuple[str, str] | None:
     """Extrai shop_id e item_id de uma URL Shopee.
-    Aceita formatos:
-      - https://shopee.com.br/product-name-i.shopid.itemid
-      - https://shopee.com.br/shopname/shopid/itemid  (link de compartilhamento)
-      - https://s.shopee.com.br/...  (link curto)
+    Aceita múltiplos formatos de URL (canônica, compartilhamento, links curtos, universal link).
     Retorna (shop_id, item_id) ou None.
     """
-    # resolve link curto primeiro
     url = _resolve_short_url(url)
 
-    # formato 1: -i.shopid.itemid
-    m = re.search(r"-i\.(\d+)\.(\d+)", url)
-    if m:
-        return m.group(1), m.group(2)
-
-    # formato 2: -i shopid itemid (com espaço ou .)
+    # formato 1: -i.shopid.itemid ou -i shopid itemid
     m = re.search(r"-i[\s.]+(\d+)[\s.]+(\d+)", url)
     if m:
         return m.group(1), m.group(2)
 
-    # formato 3: query params
+    # formato 2: query params (itemid=... & shopid=... ou i=shopid.itemid)
     parsed = urlparse(url)
-    m = re.search(r"i=(\d+)\.(\d+)", parsed.query)
+    m = re.search(r"[?&]i=(\d+)[\.]+(\d+)", url)
     if m:
         return m.group(1), m.group(2)
 
-    # formato 4: /shopname/shopid/itemid (link de compartilhamento)
-    m = re.search(r"/([^/]+)/(\d+)/(\d+)", parsed.path)
-    if m:
-        return m.group(2), m.group(3)
+    item_id_m = re.search(r"[?&](?:item_?id)=(\d+)", url, re.I)
+    shop_id_m = re.search(r"[?&](?:shop_?id)=(\d+)", url, re.I)
+    if item_id_m and shop_id_m:
+        return shop_id_m.group(1), item_id_m.group(1)
+
+    # formato 3: /product/shopid/itemid ou /shopname/shopid/itemid
+    partes = [p for p in parsed.path.strip("/").split("/") if p]
+    if len(partes) >= 2 and partes[-1].isdigit() and partes[-2].isdigit():
+        return partes[-2], partes[-1]
+    if len(partes) >= 3 and partes[-1].isdigit() and partes[-2].isdigit():
+        return partes[-2], partes[-1]
 
     return None
 
 
 def _shopee_api(shop_id: str, item_id: str) -> dict | None:
     """Busca dados do produto via API interna da Shopee."""
-    url = f"https://shopee.com.br/api/v4/item/get?itemid={item_id}&shopid={shop_id}"
-    try:
-        resp = requests.get(url, headers=_HEADERS, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("code") == 0:
-            return data.get("data", {})
-    except Exception as exc:
-        print(f"[shopee] API falhou: {exc}")
+    headers_api = dict(_HEADERS)
+    headers_api.update({
+        "Referer": "https://shopee.com.br/",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Shopee-Language": "pt-BR",
+        "X-API-SOURCE": "pc",
+        "Accept": "application/json",
+    })
+    urls = [
+        f"https://shopee.com.br/api/v4/item/get?itemid={item_id}&shopid={shop_id}",
+        f"https://shopee.com.br/api/v4/pdp/get_pc?item_id={item_id}&shop_id={shop_id}",
+    ]
+    for url in urls:
+        try:
+            resp = requests.get(url, headers=headers_api, timeout=15)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("code") == 0:
+                    return data.get("data", {})
+        except Exception:
+            pass
     return None
 
 
 def _shopee_meta_tags(url: str) -> dict | None:
-    """Extrai dados de meta tags OpenGraph (funciona mesmo com anti-bot)."""
+    """Extrai dados de meta tags OpenGraph e application/ld+json (funciona mesmo com anti-bot leve)."""
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=15)
         resp.raise_for_status()
@@ -101,30 +201,52 @@ def _shopee_meta_tags(url: str) -> dict | None:
 
         resultado = {}
 
-        # og:image
+        # 1. Tenta application/ld+json primeiro (alta fidelidade)
+        ld = _extrair_shopee_ld_json(html)
+        if ld:
+            if ld.get("nome"):
+                resultado["name"] = ld["nome"]
+            if ld.get("imagens"):
+                resultado["images_list"] = ld["imagens"]
+            if ld.get("preco"):
+                resultado["price"] = ld["preco"]
+
+        # 2. og:image
         m = re.search(r'<meta[^>]*property="og:image"[^>]*content="([^"]+)"', html)
         if m:
-            resultado["image"] = m.group(1)
+            resultado["image"] = _limpar_url_imagem_shopee(m.group(1))
 
-        # og:title
+        # 3. og:title
         m = re.search(r'<meta[^>]*property="og:title"[^>]*content="([^"]+)"', html)
-        if m:
-            resultado["name"] = m.group(1)
+        if m and not resultado.get("name"):
+            resultado["name"] = _limpar_nome_produto(m.group(1))
 
-        # og:description
+        # 4. og:description
         m = re.search(r'<meta[^>]*property="og:description"[^>]*content="([^"]+)"', html)
         if m:
             resultado["description"] = m.group(1)
 
-        # video (se tiver)
+        # 5. video (se tiver)
         m = re.search(r'<meta[^>]*property="og:video"[^>]*content="([^"]+)"', html)
         if m:
             resultado["video"] = m.group(1)
+        else:
+            m_vid = re.search(r'<video[^>]*src="([^"]+)"', html)
+            if m_vid:
+                resultado["video"] = m_vid.group(1)
 
-        # procura todas as imagens cf.shopee.com.br no HTML
-        imagens = list(set(re.findall(r'https://cf\.shopee\.com\.br/file/[a-f0-9]+', html)))
-        if imagens:
-            resultado["images_list"] = imagens[:10]
+        # 6. Procura todas as imagens da Shopee / susercontent no HTML (CDNs novas e antigas)
+        padrao_imgs = r'https://(?:down-[a-z0-9\.\-]+|cf\.shopee\.com\.br)/file/([a-zA-Z0-9_\-]+)'
+        encontrados = re.findall(padrao_imgs, html)
+        if encontrados:
+            imgs = resultado.get("images_list") or []
+            vistos = {re.search(r'/file/([a-zA-Z0-9_\-]+)', u).group(1) for u in imgs if '/file/' in u}
+            for h in encontrados:
+                limpo_h = re.sub(r'_(?:tn|xxs|xs|s|m)$', '', h)
+                if limpo_h not in vistos:
+                    vistos.add(limpo_h)
+                    imgs.append(f"https://down-br.img.susercontent.com/file/{limpo_h}")
+            resultado["images_list"] = imgs[:15]
 
         return resultado if resultado else None
     except Exception:
@@ -132,32 +254,127 @@ def _shopee_meta_tags(url: str) -> dict | None:
 
 
 def _shopee_direto(url: str) -> dict | None:
-    """Fallback: abre a página e extrai dados do script __INITIAL_STATE__."""
+    """Fallback: abre a página e extrai dados do script __INITIAL_STATE__ ou ld+json."""
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=15)
         resp.raise_for_status()
+        html = resp.text
+
         # procura o JSON embutido no HTML
-        m = re.search(r"window\.__INITIAL_STATE__\s*=\s*({.+?})\s*;", resp.text)
+        m = re.search(r"window\.__INITIAL_STATE__\s*=\s*({.+?})\s*;", html)
         if m:
-            data = json.loads(m.group(1))
-            # navega até os dados do item
-            item = data.get("item", {}).get("itemData", {})
-            if item:
-                return item
+            try:
+                data = json.loads(m.group(1))
+                item = data.get("item", {}).get("itemData", {})
+                if item:
+                    return item
+            except Exception:
+                pass
+
+        # ld+json
+        ld = _extrair_shopee_ld_json(html)
+        if ld and (ld.get("imagens") or ld.get("nome")):
+            return {
+                "name": ld.get("nome", ""),
+                "images": ld.get("imagens", []),
+                "price": ld.get("preco", ""),
+            }
     except Exception:
         pass
+    return None
+
+
+def _shopee_midia_navegador(url: str) -> dict | None:
+    """Extrai imagens e vídeos da Shopee usando Playwright (bypassa proteções anti-bot)."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+
+    try:
+        with sync_playwright() as pw:
+            headless_mode = not bool(os.environ.get("DISPLAY"))
+            nav = pw.chromium.launch(
+                headless=headless_mode,
+                args=[
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                ],
+            )
+            ctx = nav.new_context(
+                locale="pt-BR",
+                user_agent=_HEADERS["User-Agent"],
+                viewport={"width": 1280, "height": 800},
+            )
+            page = ctx.new_page()
+
+            videos_coletados = []
+
+            def _on_response(resp):
+                r_url = resp.url
+                if any(ext in r_url.lower() for ext in (".mp4", "cvf.shopee.com.br", "down-bs-br.img.susercontent.com")):
+                    if r_url not in videos_coletados:
+                        videos_coletados.append(r_url)
+
+            page.on("response", _on_response)
+            page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+
+            for _ in range(8):
+                page.wait_for_timeout(1500)
+                if "Ofertas incríveis" not in page.title():
+                    break
+
+            srcs = page.eval_on_selector_all(
+                'img[src*="/file/"]',
+                "els => els.map(e => e.src).filter(Boolean)"
+            )
+
+            dom_videos = page.eval_on_selector_all(
+                "video source, video",
+                "els => els.map(e => e.src || e.getAttribute('src')).filter(Boolean)"
+            )
+            for v in dom_videos:
+                if v and v.startswith("http") and v not in videos_coletados:
+                    videos_coletados.append(v)
+
+            meta_title = page.title()
+            nav.close()
+
+            imgs_finais = []
+            vistos_hash = set()
+            for s in srcs:
+                m_hash = re.search(r'/file/([a-zA-Z0-9_\-]+)', s)
+                if m_hash:
+                    h = re.sub(r'_(?:tn|xxs|xs|s|m)$', '', m_hash.group(1))
+                    if h not in vistos_hash:
+                        vistos_hash.add(h)
+                        imgs_finais.append(f"https://down-br.img.susercontent.com/file/{h}")
+
+            nome = _limpar_nome_produto(meta_title)
+            if "Ofertas incríveis" in nome or "Shopee Brasil" in nome:
+                nome = ""
+
+            if imgs_finais or videos_coletados:
+                return {
+                    "imagens": imgs_finais[:15],
+                    "videos": videos_coletados[:5],
+                    "nome": nome,
+                }
+    except Exception as exc:
+        print(f"[shopee] Fallback de navegador para mídia falhou: {exc}")
     return None
 
 
 def extrair_shopee(url: str) -> dict:
     """Extrai imagens e vídeos de um anúncio Shopee.
 
-    Retorna: {"imagens": [...], "videos": [...], "nome": str}
+    Retorna: {"imagens": [...], "videos": [...], "nome": str, "fonte": "shopee", "fallback": bool}
     """
     resultado = {"imagens": [], "videos": [], "nome": "", "fonte": "shopee", "fallback": False}
 
     # resolve link curto
     url = _resolve_short_url(url)
+    slug_nome = extrair_slug_shopee(url)
 
     ids = _parse_shopee_url(url)
     if not ids:
@@ -176,15 +393,15 @@ def extrair_shopee(url: str) -> dict:
     shop_id, item_id = ids
     print(f"[shopee] Buscando item {item_id} da loja {shop_id}")
 
-    # tenta API primeiro
+    # 1. tenta API primeiro
     item = _shopee_api(shop_id, item_id)
 
-    # fallback: HTML direto
+    # 2. fallback: HTML direto
     if not item:
         print("[shopee] API falhou, tentando HTML...")
         item = _shopee_direto(url)
 
-    # fallback: meta tags
+    # 3. fallback: meta tags e LD-JSON
     if not item:
         print("[shopee] HTML falhou, tentando meta tags...")
         meta = _shopee_meta_tags(url)
@@ -195,9 +412,27 @@ def extrair_shopee(url: str) -> dict:
                 resultado["imagens"].extend(meta["images_list"])
             if meta.get("video"):
                 resultado["videos"].append(meta["video"])
-            resultado["nome"] = meta.get("name", "")
-            print(f"[shopee] Meta tags: {len(resultado['imagens'])} imagens, {len(resultado['videos'])} vídeos")
-            return resultado
+            resultado["nome"] = meta.get("name", "") or slug_nome
+            if resultado["imagens"] or resultado["videos"]:
+                # deduplica imagens
+                resultado["imagens"] = list(dict.fromkeys(resultado["imagens"]))
+                resultado["videos"] = list(dict.fromkeys(resultado["videos"]))
+                print(f"[shopee] Meta tags: {len(resultado['imagens'])} imagens, {len(resultado['videos'])} vídeos")
+                return resultado
+
+    # 4. fallback: navegador Playwright (caso o anti-bot bloqueie requisições HTTP)
+    if not item and not resultado["imagens"] and not resultado["videos"]:
+        print("[shopee] Tentando extração via navegador (Playwright)...")
+        nav_data = _shopee_midia_navegador(url)
+        if nav_data:
+            resultado["imagens"].extend(nav_data.get("imagens", []))
+            resultado["videos"].extend(nav_data.get("videos", []))
+            resultado["nome"] = nav_data.get("nome", "") or slug_nome
+            if resultado["imagens"] or resultado["videos"]:
+                resultado["imagens"] = list(dict.fromkeys(resultado["imagens"]))
+                resultado["videos"] = list(dict.fromkeys(resultado["videos"]))
+                print(f"[shopee] Navegador: {len(resultado['imagens'])} imagens, {len(resultado['videos'])} vídeos")
+                return resultado
 
     # se nada funcionou, retorna fallback
     if not item:
@@ -217,23 +452,33 @@ def extrair_shopee(url: str) -> dict:
     images = item.get("images", [])
     for img in images:
         if img:
-            if img.startswith("http"):
-                resultado["imagens"].append(img)
-            else:
-                resultado["imagens"].append(f"https://cf.shopee.com.br/file/{img}")
+            img_url = _limpar_url_imagem_shopee(img)
+            if img_url not in resultado["imagens"]:
+                resultado["imagens"].append(img_url)
 
-    # extrai vídeos
-    videos = item.get("videos", [])
+    # extrai vídeos (suporta item['videos'] e item['video_info_list'])
+    videos = item.get("videos") or []
+    if not videos and item.get("video_info_list"):
+        for vinfo in item.get("video_info_list", []):
+            if isinstance(vinfo, dict):
+                vurl = vinfo.get("default_format", {}).get("url") or vinfo.get("url")
+                if vurl:
+                    videos.append(vurl)
+
     for vid in videos:
         vurl = vid.get("url", "") if isinstance(vid, dict) else str(vid)
         if vurl:
             if vurl.startswith("http"):
                 resultado["videos"].append(vurl)
             else:
-                resultado["videos"].append(f"https://cf.shopee.com.br/file/{vurl}")
+                resultado["videos"].append(f"https://down-br.img.susercontent.com/file/{vurl}")
+
+    # deduplica
+    resultado["imagens"] = list(dict.fromkeys(resultado["imagens"]))
+    resultado["videos"] = list(dict.fromkeys(resultado["videos"]))
 
     # nome
-    resultado["nome"] = item.get("name", "")
+    resultado["nome"] = _limpar_nome_produto(item.get("name", "")) or slug_nome
 
     print(f"[shopee] Encontrado: {len(resultado['imagens'])} imagens, {len(resultado['videos'])} vídeos")
     return resultado
@@ -438,12 +683,15 @@ def _cadastro_por_ia(url: str) -> dict | None:
     url_pesquisa = _resolve_short_url(url)
     ids = _parse_shopee_url(url_pesquisa)
     contexto = f" (itemid {ids[1]}, loja {ids[0]})" if ids else ""
+    slug_dica = extrair_slug_shopee(url_pesquisa)
+    dica_nome = f" Nome/slug provável no link: '{slug_dica}'." if slug_dica else ""
     sistema = (
         "Você extrai dados de produtos Shopee para preencher uma planilha. "
+        "Limpe termos promocionais e sufixos (ex: 'Frete Grátis', 'Pronta Entrega', '| Shopee Brasil'). "
         "Responda SOMENTE com o JSON pedido — sem comentários, sem markdown."
     )
     pedido = (
-        f"Produto na Shopee: {url_pesquisa}{contexto}. "
+        f"Produto na Shopee: {url_pesquisa}{contexto}.{dica_nome} "
         "Use a busca do Google para localizar a página EXATA deste produto. "
         'Responda apenas com: {"nome": "<nome curto do produto em português>", '
         '"preco": "<preço médio atual, ex: 79,99>", '
@@ -468,7 +716,7 @@ def _cadastro_por_ia(url: str) -> dict | None:
     if not isinstance(dados, dict):
         return None
     return {
-        "nome": str(dados.get("nome") or "").strip(),
+        "nome": _limpar_nome_produto(str(dados.get("nome") or "").strip()),
         "nicho": str(dados.get("nicho") or "").strip(),
         "preco": _normalizar_preco(dados.get("preco")),
     }
@@ -514,7 +762,7 @@ def _cadastro_navegador(url: str) -> dict | None:
         print(f"[cadastro] navegador falhou: {exc}")
         return None
 
-    nome = (meta.get("og:title") or "").strip()
+    nome = _limpar_nome_produto((meta.get("og:title") or "").strip())
     if not nome or "Ofertas incríveis" in nome or "Shopee Brasil" in nome:
         return None  # parou no desafio/captcha
     precos = re.findall(r"R\$\s*[\d.]+,\d{2}", html)

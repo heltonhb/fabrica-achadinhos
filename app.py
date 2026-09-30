@@ -214,11 +214,12 @@ with st.sidebar:
     st.markdown("""
     1. Recarregue para ler a planilha
     2. Clique num produto para ver/gerar prompts
-    3. Copie o prompt e cole no Google Vids ou NotebookLM
-    4. Em **🚀 Pipeline**, gere gancho, roteiro e pacote de post
-    """)
+    3. Copie o prompt e cole no Google Vids ou NotebookLM    4. Em **🚀 Pipeline**, gere gancho, roteiro de referência e pacote de post
+    5. Em **🤖 Gerar Prompt**, gere o prompt autocontido para o criativo
+    """
+)
 
-# ─── Carrega dados na primeira vez ────────────────────────────────────────────
+# ─── Carrega dados na primeira vez
 if not st.session_state.produtos:
     recarregar()
 
@@ -803,7 +804,7 @@ if secao == "📝 Legenda":
 
 # ─── SEÇÃO: Gerar Prompt ─────────────────────────────────────────────────────
 if secao == "🤖 Gerar Prompt":
-    st.subheader("Gerar prompt para criativo")
+    st.subheader("Gerar PROMPT para criativo (Google Vids / NotebookLM / carrossel)")
 
     if not st.session_state.produtos:
         st.info("Carregue a planilha primeiro (sidebar → Recarregar)")
@@ -832,7 +833,10 @@ if secao == "🤖 Gerar Prompt":
             st.error(f"Não foi possível gerar ganchos: {r_gancho}")
         elif r_gancho is not None:
             if r_gancho:
-                st.session_state.opcoes_gancho = r_gancho
+                st.session_state.opcoes_gancho = [
+                    g if isinstance(g, dict) else {"angulo": "geral", "texto": str(g), "explicacao": ""}
+                    for g in r_gancho
+                ]
             else:
                 st.error("Não foi possível gerar ganchos. Verifique a GEMINI_API_KEY.")
 
@@ -886,17 +890,23 @@ if secao == "🤖 Gerar Prompt":
         # exibe as opções de gancho
         if st.session_state.opcoes_gancho:
             st.markdown("**Escolha um gancho (clique para usar):**")
-            cols_g = st.columns(3)
+            cols_g = st.columns(len(st.session_state.opcoes_gancho))
             for i, g in enumerate(st.session_state.opcoes_gancho):
+                if isinstance(g, str):
+                    g = {"angulo": "geral", "texto": g, "explicacao": ""}
+                angulo = str(g.get("angulo", "geral") if isinstance(g, dict) else "geral").strip().lower()
+                texto = str(g.get("texto", "") if isinstance(g, dict) else g).strip()
+                explicacao = str(g.get("explicacao", "") if isinstance(g, dict) else "").strip()
                 with cols_g[i]:
                     emoji = {"dor": "😣", "surpresa": "😮", "economia": "💰"}.get(
-                        g.get("angulo", ""), "✨"
+                        angulo, "✨"
                     )
-                    st.markdown(f"**{emoji} {g.get('angulo', '').upper()}**")
-                    st.info(f'"{g.get("texto", "")}"')
-                    st.caption(g.get("explicacao", ""))
+                    st.markdown(f"**{emoji} {angulo.upper()}**")
+                    st.info(f'"{texto}"')
+                    if explicacao:
+                        st.caption(explicacao)
                     if st.button("Usar este", key=f"usar_gancho_{p.id}_{i}", use_container_width=True):
-                        st.session_state.gancho_selecionado = g["texto"]
+                        st.session_state.gancho_selecionado = texto
                         st.session_state.opcoes_gancho = []
                         st.rerun()
 
@@ -914,6 +924,11 @@ if secao == "🤖 Gerar Prompt":
 
         # ── PASSO 2: Tipo e Estilo ────────────────────────────────────────────
         st.markdown("### 2️⃣ Tipo e estilo do criativo")
+
+        st.caption(
+            "Este passo gera o PROMPT para o gerador externo (Google Vids, NotebookLM ou carrossel), "
+            "não o roteiro de referência em português."
+        )
 
         col_tipo, col_estilo = st.columns(2)
         with col_tipo:

@@ -145,3 +145,68 @@ def test_proximo_id():
     assert proximo_id([]) == "#01"
     assert proximo_id([Produto(id="#03"), Produto(id="#07")]) == "#08"
     assert proximo_id([Produto(id="12")]) == "#13"
+
+
+# ── novos testes de robustez Shopee ──────────────────────────────────────────
+def test_parse_url_variados():
+    # formato /product/shopid/itemid
+    assert scraping._parse_shopee_url("https://shopee.com.br/product/313660590/22893738408") == ("313660590", "22893738408")
+    # formato query params
+    assert scraping._parse_shopee_url("https://shopee.com.br/item?shopid=313660590&itemid=22893738408") == ("313660590", "22893738408")
+    assert scraping._parse_shopee_url("https://shopee.com.br/item?i=313660590.22893738408") == ("313660590", "22893738408")
+
+
+def test_extrair_slug_shopee():
+    u1 = "https://shopee.com.br/Mini-Processador-Triturador-El%C3%A9trico-i.313660590.22893738408"
+    assert scraping.extrair_slug_shopee(u1) == "Mini Processador Triturador Elétrico"
+
+    u2 = "https://shopee.com.br/universal-link/Jogo-de-Lencol-400-Fios-i.111.222"
+    assert scraping.extrair_slug_shopee(u2) == "Jogo de Lencol 400 Fios"
+
+    u3 = "https://shopee.com.br/product/313660590/22893738408"
+    assert scraping.extrair_slug_shopee(u3) == ""
+
+
+def test_limpar_nome_produto():
+    assert scraping._limpar_nome_produto("Mini Processador | Shopee Brasil") == "Mini Processador"
+    assert scraping._limpar_nome_produto("Compre Fone Bluetooth na Shopee Brasil!") == "Fone Bluetooth"
+    assert scraping._limpar_nome_produto("[FRETE GRÁTIS] Relógio Smartwatch") == "Relógio Smartwatch"
+
+
+def test_limpar_url_imagem_shopee():
+    # Remove sufixo de miniatura e preserva alta resolução
+    url_thumb = "https://down-br.img.susercontent.com/file/br-11134207-7r98o-lx123456_tn"
+    esperado = "https://down-br.img.susercontent.com/file/br-11134207-7r98o-lx123456"
+    assert scraping._limpar_url_imagem_shopee(url_thumb) == esperado
+
+    # Hash direto vira URL completa
+    assert scraping._limpar_url_imagem_shopee("br-11134207-hash") == "https://down-br.img.susercontent.com/file/br-11134207-hash"
+
+
+def test_extrair_shopee_ld_json():
+    html = """
+    <html>
+      <head>
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Product",
+          "name": "Copo Térmico Inox 473ml | Shopee Brasil",
+          "image": [
+            "https://down-br.img.susercontent.com/file/br-11134207-copo_tn"
+          ],
+          "offers": {
+            "@type": "Offer",
+            "price": "39.90"
+          }
+        }
+        </script>
+      </head>
+    </html>
+    """
+    res = scraping._extrair_shopee_ld_json(html)
+    assert res is not None
+    assert res["nome"] == "Copo Térmico Inox 473ml"
+    assert res["preco"] == "39,90"
+    assert res["imagens"] == ["https://down-br.img.susercontent.com/file/br-11134207-copo"]
+
