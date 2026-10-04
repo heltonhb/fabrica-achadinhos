@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pip install -r requirements.txt && python scripts/gerar_vitrine.py",
+  "buildCommand": "python scripts/gerar_vitrine.py",
   "outputDirectory": "vitrine",
   "framework": null
 }
