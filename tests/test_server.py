@@ -71,3 +71,18 @@ def test_gerar_legenda_api():
     assert "QUERO" in dados["texto"]
     assert "#achadinhos" in dados["hashtags"]
 
+
+def test_api_vitrine_status():
+    response = client.get("/api/vitrine/status")
+    assert response.status_code == 200
+    dados = response.json()
+    assert "vitrine_url" in dados
+    assert "tem_hook" in dados
+
+
+def test_api_vitrine_deploy_sem_hook():
+    response = client.post("/api/vitrine/deploy")
+    # Deve retornar 400 ou 200 dependendo se há VERCEL_DEPLOY_HOOK no ambiente
+    assert response.status_code in (200, 400)
+
+

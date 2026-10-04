@@ -18,10 +18,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import requests
 
 # Imports do núcleo do projeto
-from config import BASE_DIR, ESTADOS, Produto, proximo_id
+from config import BASE_DIR, ESTADOS, Produto, proximo_id, obter_segredo, ENV_PATH
 from sheets import ler_produtos, salvar_produtos
+from scripts.gerar_vitrine import construir_vitrine
 from prompts import gerar_prompt_video, gerar_todos_prompts, ESTILOS
 from roteirista import gerar_ganchos, gerar_roteiro
 from legenda import gerar_legenda, gerar_legenda_template
@@ -405,6 +407,67 @@ def api_baixar_midias(produto_id: str, background_tasks: BackgroundTasks):
 def forcar_sync():
     produtos = carregar_ou_atualizar_produtos()
     return {"sucesso": True, "total": len(produtos)}
+
+
+# ─── Endpoints da Vitrine Online (Shopee / Vercel) ───────────────────────────
+
+class ConfigHookReq(BaseModel):
+    hook_url: str
+
+
+@app.get("/api/vitrine/status")
+def api_vitrine_status():
+    hook_url = obter_segredo("VERCEL_DEPLOY_HOOK")
+    vitrine_url = obter_segredo("VERCEL_VITRINE_URL") or "https://fabrica-achadinhos.vercel.app"
+    return {
+        "vitrine_url": vitrine_url,
+        "tem_hook": bool(hook_url),
+        "hook_mascarado": f"{hook_url[:28]}..." if hook_url else ""
+    }
+
+
+@app.post("/api/vitrine/deploy")
+def api_vitrine_deploy():
+    hook_url = obter_segredo("VERCEL_DEPLOY_HOOK")
+    if not hook_url:
+        raise HTTPException(status_code=400, detail="Deploy Hook da Vercel não configurado no .env")
+    try:
+        resp = requests.post(hook_url.strip(), timeout=12)
+        if resp.status_code in (200, 201):
+            return {
+                "sucesso": True,
+                "mensagem": "Deploy iniciado com sucesso na Vercel! A vitrine estará atualizada em ~30s."
+            }
+        raise HTTPException(status_code=resp.status_code, detail=f"Vercel retornou código {resp.status_code}: {resp.text}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro ao contatar a Vercel: {exc}")
+
+
+@app.post("/api/vitrine/gerar-local")
+def api_vitrine_gerar_local():
+    try:
+        res = construir_vitrine()
+        return {"sucesso": True, "resumo": res}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar vitrine local: {exc}")
+
+
+@app.post("/api/vitrine/config-hook")
+def api_vitrine_config_hook(req: ConfigHookReq):
+    hook = req.hook_url.strip()
+    if not hook:
+        raise HTTPException(status_code=400, detail="URL inválida")
+    env_text = ENV_PATH.read_text(encoding="utf-8") if ENV_PATH.exists() else ""
+    if "VERCEL_DEPLOY_HOOK=" in env_text:
+        linhas = [
+            f"VERCEL_DEPLOY_HOOK={hook}" if l.startswith("VERCEL_DEPLOY_HOOK=") else l
+            for l in env_text.splitlines()
+        ]
+        ENV_PATH.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+    else:
+        with open(ENV_PATH, "a", encoding="utf-8") as f:
+            f.write(f"\nVERCEL_DEPLOY_HOOK={hook}\n")
+    return {"sucesso": True, "mensagem": "Deploy Hook salvo com sucesso no .env!"}
 
 
 # ─── Frontend Web (Google Stitch UI) ──────────────────────────────────────────

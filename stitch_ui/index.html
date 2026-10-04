@@ -145,7 +145,36 @@
         </div>
 
         <!-- Bottom Card: Google Sheets & Status -->
-        <div class="flex flex-col gap-3 px-1">
+        <div class="flex flex-col gap-2.5 px-1">
+          <!-- Card Vitrine Shopee Online -->
+          <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/30 shadow-lg relative overflow-hidden">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-primary text-[16px]">storefront</span>
+                Vitrine Shopee
+              </span>
+              <span class="font-mono text-[10px] px-1.5 py-0.5 rounded-full" 
+                    :class="vitrineStatus.tem_hook ? 'bg-secondary/20 text-secondary border border-secondary/30' : 'bg-surface-container-high text-on-surface-variant border border-outline-variant/30'">
+                {{ vitrineStatus.tem_hook ? 'Conectada' : 'Sem Hook' }}
+              </span>
+            </div>
+            <div class="flex items-center justify-between mb-2">
+              <a :href="vitrineStatus.vitrine_url" target="_blank" class="text-[11px] text-tertiary hover:underline flex items-center gap-1">
+                <span class="material-symbols-outlined text-[13px]">open_in_new</span> Ver no ar
+              </a>
+              <button @click="modalVitrineHook = true" class="text-[10px] text-on-surface-variant hover:text-primary transition-colors flex items-center gap-0.5">
+                <span class="material-symbols-outlined text-[12px]">settings</span> Config
+              </button>
+            </div>
+            <button @click="dispararDeployVitrine()" :disabled="carregandoDeploy"
+                    class="w-full py-1.5 px-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50">
+              <span class="material-symbols-outlined text-[15px]" :class="carregandoDeploy ? 'animate-spin' : ''">
+                {{ carregandoDeploy ? 'refresh' : 'rocket_launch' }}
+              </span>
+              {{ carregandoDeploy ? 'Atualizando...' : 'Atualizar Vitrine' }}
+            </button>
+          </div>
+
           <div class="p-3.5 rounded-xl bg-surface-container border border-outline-variant/30 shadow-lg relative overflow-hidden">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-bold text-on-surface flex items-center gap-1.5">
@@ -992,6 +1021,48 @@
       </div>
     </div>
 
+    <!-- ==================== MODAL CONFIGURAR HOOK VITRINE ==================== -->
+    <div v-if="modalVitrineHook" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+      <div class="w-full max-w-md rounded-2xl bg-surface-container-high border border-outline-variant/40 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div class="flex items-center justify-between p-4 border-b border-outline-variant/20 bg-surface-container">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-[20px]">storefront</span>
+            <h3 class="text-sm font-bold text-on-surface">Configurar Deploy Hook da Vitrine</h3>
+          </div>
+          <button @click="modalVitrineHook = false" class="text-on-surface-variant hover:text-on-surface p-1 rounded-lg">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+        <div class="p-5 flex flex-col gap-4">
+          <p class="text-xs text-on-surface-variant leading-relaxed">
+            Para atualizar a vitrine na Vercel com 1 clique sem precisar do terminal, crie um <strong>Deploy Hook</strong> no painel da Vercel:
+            <br/><span class="text-primary font-mono text-[11px]">Settings ➔ Git ➔ Deploy Hooks ➔ Branch: main</span>
+          </p>
+          <div>
+            <label class="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+              URL do Deploy Hook
+            </label>
+            <input v-model="inputHookUrl" type="password" placeholder="https://api.vercel.com/v1/integrations/deploy/..."
+                   class="w-full px-3 py-2 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary font-mono placeholder:text-on-surface-variant/40"/>
+          </div>
+          <div class="flex items-center justify-between pt-2">
+            <button @click="regerarVitrineLocal()" class="text-[11px] text-tertiary hover:underline flex items-center gap-1 font-semibold">
+              <span class="material-symbols-outlined text-[14px]">build</span> Gerar Local
+            </button>
+            <div class="flex items-center gap-2">
+              <button @click="modalVitrineHook = false" class="px-3 py-1.5 rounded-lg bg-surface-container text-xs text-on-surface hover:bg-surface-container-high transition-colors">
+                Cancelar
+              </button>
+              <button @click="salvarHookVitrine()" :disabled="!inputHookUrl"
+                      class="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs shadow-md transition-all disabled:opacity-50">
+                Salvar Hook
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -1061,6 +1132,83 @@
           setTimeout(() => {
             toast.value.visivel = false;
           }, 3500);
+        }
+
+        // ─── Vitrine Shopee Online ───────────────────────────────────────────
+        const vitrineStatus = ref({
+          vitrine_url: 'https://fabrica-achadinhos.vercel.app',
+          tem_hook: false
+        });
+        const carregandoDeploy = ref(false);
+        const modalVitrineHook = ref(false);
+        const inputHookUrl = ref('');
+
+        async function carregarStatusVitrine() {
+          try {
+            const res = await fetch('/api/vitrine/status');
+            if (res.ok) {
+              const dados = await res.json();
+              vitrineStatus.value = dados;
+            }
+          } catch (e) {
+            console.warn('Erro ao carregar status da vitrine:', e);
+          }
+        }
+
+        async function dispararDeployVitrine() {
+          if (!vitrineStatus.value.tem_hook) {
+            modalVitrineHook.value = true;
+            return;
+          }
+          carregandoDeploy.value = true;
+          try {
+            const res = await fetch('/api/vitrine/deploy', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok && data.sucesso) {
+              mostrarToast('🚀 Deploy iniciado! Vitrine atualizada em ~30s.', 'sucesso');
+            } else {
+              mostrarToast(data.detail || 'Erro ao disparar deploy', 'erro');
+            }
+          } catch (e) {
+            mostrarToast('Falha na conexão ao disparar deploy', 'erro');
+          } finally {
+            carregandoDeploy.value = false;
+          }
+        }
+
+        async function salvarHookVitrine() {
+          if (!inputHookUrl.value.trim()) return;
+          try {
+            const res = await fetch('/api/vitrine/config-hook', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hook_url: inputHookUrl.value.trim() })
+            });
+            const data = await res.json();
+            if (res.ok && data.sucesso) {
+              mostrarToast('Hook salvo com sucesso no .env!', 'sucesso');
+              modalVitrineHook.value = false;
+              await carregarStatusVitrine();
+            } else {
+              mostrarToast(data.detail || 'Erro ao salvar hook', 'erro');
+            }
+          } catch (e) {
+            mostrarToast('Erro ao salvar hook', 'erro');
+          }
+        }
+
+        async function regerarVitrineLocal() {
+          try {
+            const res = await fetch('/api/vitrine/gerar-local', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok && data.sucesso) {
+              mostrarToast(`Vitrine local gerada com ${data.resumo.elegiveis} cards!`, 'sucesso');
+            } else {
+              mostrarToast(data.detail || 'Erro ao gerar vitrine local', 'erro');
+            }
+          } catch (e) {
+            mostrarToast('Erro ao gerar localmente', 'erro');
+          }
         }
 
         async function carregarProdutos() {
@@ -1488,9 +1636,17 @@
         onMounted(() => {
           carregarProdutos();
           carregarMetricas();
+          carregarStatusVitrine();
         });
 
         return {
+          vitrineStatus,
+          carregandoDeploy,
+          modalVitrineHook,
+          inputHookUrl,
+          dispararDeployVitrine,
+          salvarHookVitrine,
+          regerarVitrineLocal,
           abaAtiva,
           busca,
           filtroPlataforma,
