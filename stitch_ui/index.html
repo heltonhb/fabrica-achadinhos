@@ -1214,7 +1214,9 @@
         async function carregarProdutos() {
           try {
             const res = await fetch('/api/produtos');
-            produtos.value = await res.json();
+            const dados = await res.json();
+            // Inverte a lista de trás para frente (último cadastrado no topo)
+            produtos.value = Array.isArray(dados) ? [...dados].reverse() : [];
             if (produtos.value.length > 0 && !produtoSelecionado.value) {
               selecionarProduto(produtos.value[0]);
             }
@@ -1303,6 +1305,7 @@
           if (busca.value.trim()) {
             const termo = busca.value.toLowerCase();
             lista = lista.filter(p => 
+              (p.ID || '').toLowerCase().includes(termo) ||
               (p['Nome do Produto'] || '').toLowerCase().includes(termo) ||
               (p.Nicho || '').toLowerCase().includes(termo) ||
               (p['Roteiro / Gancho'] || '').toLowerCase().includes(termo)
