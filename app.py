@@ -14,13 +14,29 @@ from dataclasses import replace as dc_replace
 from pathlib import Path
 from typing import Any, Callable
 
+import requests
 import streamlit as st
 
 # garante que o diretório do projeto está no path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sheets import Produto, ler_produtos, salvar_produtos, _get_sheets_service
-from config import ESTADOS, proximo_id
+from config import ESTADOS, proximo_id, obter_segredo, ENV_PATH
+from scripts.gerar_vitrine import construir_vitrine
+
+
+def disparar_deploy_vitrine(hook_url: str) -> tuple[bool, str]:
+    """Dispara um novo build na Vercel via Deploy Hook HTTP POST."""
+    if not hook_url:
+        return False, "Nenhum Deploy Hook configurado."
+    try:
+        resp = requests.post(hook_url.strip(), timeout=12)
+        if resp.status_code in (200, 201):
+            return True, "Deploy iniciado com sucesso na Vercel! Em ~30s a vitrine estará atualizada com a planilha."
+        return False, f"Vercel retornou código {resp.status_code}: {resp.text}"
+    except Exception as exc:
+        return False, f"Falha ao conectar com a Vercel: {exc}"
+
 from prompts import (
     gerar_prompt_video,
     gerar_prompt_podcast,
@@ -209,6 +225,56 @@ with st.sidebar:
             "na nuvem, defina o secret GOOGLE_TOKEN_JSON)"
         )
     st.markdown(f"**Produtos:** {len(st.session_state.produtos)}")
+    st.divider()
+
+    # ─── Vitrine Online (Shopee) ──────────────────────────────────────────────
+    st.header("🌐 Vitrine Online")
+    vitrine_url = (
+        obter_segredo("VERCEL_VITRINE_URL")
+        or "https://fabrica-achadinhos.vercel.app"
+    )
+    st.markdown(f"[🔗 **Ver Vitrine no Ar**]({vitrine_url})")
+
+    hook_url = obter_segredo("VERCEL_DEPLOY_HOOK")
+    if st.button("🚀 Atualizar Vitrine no Ar", use_container_width=True, type="primary"):
+        if hook_url:
+            with st.spinner("Solicitando novo build na Vercel..."):
+                ok, msg = disparar_deploy_vitrine(hook_url)
+                if ok:
+                    st.success(msg)
+                else:
+                    st.error(msg)
+        else:
+            st.warning("⚠️ Deploy Hook não configurado.")
+            st.info("Insira seu Deploy Hook da Vercel abaixo para atualizar a vitrine com 1 clique.")
+
+    with st.expander("⚙️ Configurar Deploy Hook"):
+        novo_hook = st.text_input(
+            "URL do Hook (Vercel):",
+            value=hook_url,
+            placeholder="https://api.vercel.com/v1/integrations/deploy/...",
+            type="password",
+        )
+        if st.button("💾 Salvar Hook no .env", key="btn_salvar_hook", use_container_width=True):
+            if novo_hook.strip():
+                env_text = ENV_PATH.read_text(encoding="utf-8") if ENV_PATH.exists() else ""
+                if "VERCEL_DEPLOY_HOOK=" in env_text:
+                    linhas = [
+                        f"VERCEL_DEPLOY_HOOK={novo_hook.strip()}" if l.startswith("VERCEL_DEPLOY_HOOK=") else l
+                        for l in env_text.splitlines()
+                    ]
+                    ENV_PATH.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+                else:
+                    with open(ENV_PATH, "a", encoding="utf-8") as f:
+                        f.write(f"\nVERCEL_DEPLOY_HOOK={novo_hook.strip()}\n")
+                st.success("Hook salvo! Agora o botão atualizará a vitrine diretamente.")
+                st.rerun()
+
+    if st.button("🛠️ Regerar Vitrine Local", use_container_width=True):
+        with st.spinner("Construindo vitrine/index.html..."):
+            res = construir_vitrine()
+            st.success(f"Vitrine gerada! {res['elegiveis']} cards ({res['com_imagem']} com imagem).")
+
     st.divider()
     st.markdown("#### Como usar")
     st.markdown("""
