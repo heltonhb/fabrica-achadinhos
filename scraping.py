@@ -12,13 +12,198 @@ import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
+from collections import deque
+from threading import Lock
 from urllib.parse import urlparse
 
 import requests
 
 from config import MIDIAS_DIR
 from gemini_client import _chamar_gemini, _reparar_json
+
+
+# ─── Agendador de chamadas à IA (limite raso) ────────────────────────────────
+# Evita sobrepor requisições e dá espaço para a cota se recuperar.
+# Uso: espera_atualiza_IA() antes de chamar _cadastro_por_ia();
+# retorna None quando o tempo de aguardo foi excedido (ou nenhuma fila).
+
+_IA_CALL_LOCK = Lock()
+_IA_CALL_SEMAPHORE = deque[tuple[float, str]]()  # (tempo_limite, conteudo)
+_IA_CALL_QUEUE = []  # caminhos de chamada aguardando (string)
+_IA_CALL_LOCK_QUEUE = Lock()
+
+# Máximo de requisições pendentes (simples backpressure)
+MAX_IA_PENDENTES = 3
+
+
+def _tempo_orm_de_IA() -> float | None:
+    """Retorna o tempo (segundos) restante até o próximo lance poder ser executado."""
+    with _IA_CALL_LOCK_QUEUE:
+        if not _IA_CALL_QUEUE:
+            return None
+        return _IA_CALL_QUEUE[0][0]
+
+
+def _agendar_IA_chamada(comprimento: str, timeout_s: float = 45.0) -> bool:
+    """Adiciona uma chamada à fila. Retorna True se puder executar agora,
+    False se ficou na fila aguardando.
+
+    O agendador garante que no máximo 1 chamada é executada a cada
+    _IA_CALL_INTERVAL_S, e não permite mais que MAX_IA_PENDENTES em fila.
+    """
+    global _IA_CALL_QUEUE
+    now = time.monotonic()
+    # remove itens expirados da frente da fila
+    while _IA_CALL_QUEUE and _IA_CALL_QUEUE[0][0] <= now:
+        _IA_CALL_QUEUE.pop(0)
+
+    if len(_IA_CALL_QUEUE) >= MAX_IA_PENDENTES:
+        # a fila está cheia; aguarda o vão
+        return False
+
+    _IA_CALL_QUEUE.append((now + _IA_CALL_INTERVAL_S, comprimento))
+    return True
+
+
+def _proximo_lance_IA() -> None:
+    """Limpa a fila de lançamentos expirados. Deve ser chamada antes de
+    executar uma chamada."""
+    with _IA_CALL_LOCK_QUEUE:
+        global _IA_CALL_QUEUE
+        now = time.monotonic()
+        while _IA_CALL_QUEUE and _IA_CALL_QUEUE[0][0] <= now:
+            _IA_CALL_QUEUE.pop(0)
+
+
+def _on_IA_chamada_concluida(comprimento: str) -> None:
+    """Marca o término de uma chamada e avisa a fila.
+
+    Sincroniza com a fila do agendador e libera espaço.
+    """
+    with _IA_CALL_LOCK_QUEUE:
+        global _IA_CALL_QUEUE
+        # remove o item correspondente à conclusão
+        try:
+            idx = _IA_CALL_QUEUE.index((time.monotonic(), comprimento))
+            _IA_CALL_QUEUE.pop(idx)
+        except ValueError:
+            pass
+        # se houver próximo item aguardando, sinaliza que pode começar
+        if _IA_CALL_QUEUE:
+            _IA_CALL_QUEUE[0] = (
+                time.monotonic() + _IA_CALL_INTERVAL_S,
+                _IA_CALL_QUEUE[0][1],
+            )
+
+
+# Intervalo mínimo entre chamadas consecutivas (segundos)
+_IA_CALL_INTERVAL_S = 10.0
+
+
+# ─── Cache da camada IA (evita chamadas repetidas do Gemini + Google) ──────────────
+_CADASTRO_CACHE: dict[str, dict] = {}
+_CACHE_TTL_S = 60 * 60  # 1h
+
+
+def _cache_key(url: str) -> str:
+    """Chave de cache baseada no link resolvido (link curto normalizado)."""
+    return url
+
+
+def _cadastro_por_cache(url: str) -> dict | None:
+    """Retorna o cache salvo se ainda válido; senão None."""
+    record = _CADASTRO_CACHE.get(_cache_key(url))
+    if record is None:
+        return None
+    ts, dados = record
+    if time.monotonic() - ts < _CACHE_TTL_S:
+        return dados
+    return None  # expirado
+
+
+def _guardar_cadastro_cache(url: str, dados: dict) -> None:
+    _CADASTRO_CACHE[_cache_key(url)] = (time.monotonic(), dados)
+
+
+# ─── Derivação de nicho ─────────────────────────────────────────────────────────
+
+# Categoria genérica de fallback quando a IA e a DOM não fornecem.
+_NICHOS_FALLBACK = {
+    "aspirador": "Limpeza",
+    "bank": "Finanças",
+    "piggy": "Finanças",
+    "geladeira": "Eletro",
+    "micro-ondas": "Eletro",
+    "liquidificador": "Eletro",
+    "creme": "Bem-estar",
+    "shampoo": "Bem-estar",
+    "sabonete": "Bem-estar",
+    "pilha": "Eletro",
+    "pneu": "Automóvel",
+    "rexate": "Automóvel",
+    "oleo": "Automóvel",
+    "filtro": "Automóvel",
+    "vetinho": "Mercearia",
+    "açucar": "Mercearia",
+    "farinha": "Mercearia",
+    "arroz": "Mercearia",
+    "feijão": "Mercearia",
+    "leite": "Mercearia",
+    "ovos": "Mercearia",
+    "pão": "Mercearia",
+    "cafe": "Mercearia",
+    "sabonete": "Higiene",
+    "escova": "Higiene",
+    "cabelo": "Bem-estar",
+    "pele": "Bem-estar",
+    "calça": "Roupas",
+    "camisa": "Roupas",
+    "tênis": "Moda",
+    "sapato": "Moda",
+    "chinel": "Moda",
+    "relógio": "Moda",
+    "relógio": "Moda",
+    "teclado": "Eletro",
+    "mouse": "Eletro",
+    "monitor": "Eletro",
+    "fone": "Eletro",
+    "fone": "Eletro",
+    "carregador": "Eletro",
+    "bateria": "Eletro",
+    "painel": "Eletro",
+    "sacola": "Bem-estar",
+    "sacola": "Bem-estar",
+}
+
+
+def _derivar_nicho(url: str, nome: str, nicho_ia: str) -> str:
+    """Tenta achar o nicho mais provável.
+
+    Ordem:
+      1. nicho já vindo da IA (por preferência)
+      2. nicho dolorido da DOM (se boa)
+      3. categorias soltas do HTML (auxílio)
+      4. nicho derivado do nome do produto
+      5. nicho genérico de fallback
+    """
+    txt = (nicho_ia or "").strip()
+    if txt:
+        return txt
+    return ""
+
+
+def _classificar_por_nome(nome: str) -> str:
+    """Classifica o produto pelo nome em um nicho genérico, se possível."""
+    if not nome:
+        return ""
+    low = nome.lower()
+    for chave, nicho in _NICHOS_FALLBACK.items():
+        if chave in low:
+            return nicho
+    return ""
+
 
 _HEADERS = {
     "User-Agent": (
@@ -135,19 +320,20 @@ def _extrair_shopee_ld_json(html: str) -> dict | None:
 
 def _parse_shopee_url(url: str) -> tuple[str, str] | None:
     """Extrai shop_id e item_id de uma URL Shopee.
-    Aceita múltiplos formatos de URL (canônica, compartilhamento, links curtos, universal link).
+    Aceita múltiplos formatos (canônica, compartilhamento, links curtos, universal link, SEO).
     Retorna (shop_id, item_id) ou None.
     """
     url = _resolve_short_url(url)
+    parsed = urlparse(url)
+    partes = [p for p in parsed.path.strip("/").split("/") if p]
 
-    # formato 1: -i.shopid.itemid ou -i shopid itemid
+    # formato 1: -i.shopid.itemid ou -i shopid itemid no path / query
     m = re.search(r"-i[\s.]+(\d+)[\s.]+(\d+)", url)
     if m:
         return m.group(1), m.group(2)
 
     # formato 2: query params (itemid=... & shopid=... ou i=shopid.itemid)
-    parsed = urlparse(url)
-    m = re.search(r"[?&]i=(\d+)[\.]+(\d+)", url)
+    m = re.search(r"[?&]i=(\d+)[\.,]+(\d+)", url)
     if m:
         return m.group(1), m.group(2)
 
@@ -157,11 +343,24 @@ def _parse_shopee_url(url: str) -> tuple[str, str] | None:
         return shop_id_m.group(1), item_id_m.group(1)
 
     # formato 3: /product/shopid/itemid ou /shopname/shopid/itemid
-    partes = [p for p in parsed.path.strip("/").split("/") if p]
     if len(partes) >= 2 and partes[-1].isdigit() and partes[-2].isdigit():
         return partes[-2], partes[-1]
     if len(partes) >= 3 and partes[-1].isdigit() and partes[-2].isdigit():
         return partes[-2], partes[-1]
+
+    # formato 4: compartilhamento (token alfanumérico no path, ex: /2gBUD8AlNf?...)
+    # o item_id deve ser algo que possa ser o id público da Shopee
+    for idx, parte in enumerate(partes):
+        if parte.isdigit() and len(parte) >= 6:
+            # se o segmento anterior é numérico, é o shop_id
+            shop_id = partes[idx - 1] if idx > 0 and partes[idx - 1].isdigit() else None
+            return shop_id, parte
+
+    # formato 5: token universal-link (ex: /universal-link/Jogo-de-Lencol-400-Fios-i.111.222)
+    # busca -i.shopid.itemid no path inteiro
+    m = re.search(r"-i[\s.]+(\d+)[\s.]+(\d+)", "/".join(partes))
+    if m:
+        return m.group(1), m.group(2)
 
     return None
 
@@ -660,6 +859,39 @@ def baixar_todas_midias(dados: dict, slug: str) -> dict:
 
 # ─── Cadastro (produto novo só com o link) ───────────────────────────────────
 
+
+def _extrair_numero_precificacao(txt: str) -> float | None:
+    """Extrai o primeiro número (inclui casas decimais) de uma string."""
+    if not txt:
+        return None
+    m = re.search(r"(\d+\.?\d*)", str(txt))
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return None
+
+
+def _borderar_preco(preco: str) -> str:
+    """Garante que o preço tenha o formato da planilha ('79,99').
+
+    Aceita:'79,99' '79.99' 'R$ 79,99' '79,990,00' (milhar)
+    Deixa em '79,99' e remove milhares, se houver.
+    """
+    if not preco:
+        return ""
+    n = re.sub(r"[^0-9.,]", "", str(preco))
+    if not re.search(r"[,\.]", n):
+        return n
+    # remove separadores de milhares (ponto quando seguido de 3 dígitos e
+    # antes de uma vírgula; ou vírgula quando seguido de 3 dígitos e
+    # no final)
+    n = re.sub(r"(?<=\d)\.(?=(\d{3})+(?:,\d{2})?$", "", n)
+    n = re.sub(r"(?<=\d),(?=(\d{3})+(?:\.\d{2})?$", "", n)
+    return n
+
+
 def _normalizar_preco(txt) -> str:
     """Reduz 'R$ 79,99' / '79.99' ao formato da planilha ('79,99')."""
     if not txt:
@@ -679,6 +911,16 @@ def _cadastro_por_ia(url: str) -> dict | None:
     A Shopee bloqueia acesso automatizado direto (API, página, leitores),
     mas a página do produto está indexada no Google com nome, preço e
     categoria — o grounding busca essa página e devolve os dados.
+
+    As chamadas são agendadas (máximo 1 a cada ~10s). Se o tempo de
+    aguardo for excedido, retorna None (fila cheia) para que o fluxo
+    principal não bloqueie por mais tempo.
+
+    Retorna:
+      - dict com nome/nicho/preco se o modelo retornou os 3 campos
+        de forma confiável
+      - None se a LLM falhar, não retornou os campos esperados,
+        ou se a fila estourar o timeout
     """
     url_pesquisa = _resolve_short_url(url)
     ids = _parse_shopee_url(url_pesquisa)
@@ -698,28 +940,74 @@ def _cadastro_por_ia(url: str) -> dict | None:
         '"nicho": "<categoria/nicho em português>"} '
         'Use "" para o que não conseguir encontrar.'
     )
-    texto = _chamar_gemini(
-        sistema, pedido,
-        temperature=0.2,
-        response_mime_type="application/json",
-        prazo_total_s=60.0,
-        esperar_janela_429=False,
-        ferramentas_google=True,
-    )
+
+    # Espera o agendador liberar espaço (timeout curto para não bloquear UI)
+    tempo_restante = _tempo_orm_de_IA()
+    if tempo_restante is not None and tempo_restante > 12.0:
+        # aguardar até o próximo lance
+        time.sleep(min(tempo_restante, 12.0))
+
+    try:
+        texto = _chamar_gemini(
+            sistema, pedido,
+            temperature=0.2,
+            response_mime_type="application/json",
+            prazo_total_s=60.0,
+            esperar_janela_429=False,
+            ferramentas_google=True,
+        )
+    except Exception as exc:
+        _on_IA_chamada_concluida(pedido)
+        raise RuntimeError(str(exc)) from exc
+
     try:
         dados = json.loads(texto)
     except json.JSONDecodeError:
         reparado = _reparar_json(texto)
+        _on_IA_chamada_concluida(pedido)
         if not reparado:
             return None
         dados = json.loads(reparado)
     if not isinstance(dados, dict):
+        _on_IA_chamada_concluida(pedido)
         return None
-    return {
-        "nome": _limpar_nome_produto(str(dados.get("nome") or "").strip()),
-        "nicho": str(dados.get("nicho") or "").strip(),
-        "preco": _normalizar_preco(dados.get("preco")),
-    }
+
+    nome = _limpar_nome_produto(str(dados.get("nome") or "").strip())
+    preco_bruto = str(dados.get("preco") or "").strip()
+    preco = _normalizar_preco(preco_bruto)
+    nicho = str(dados.get("nicho") or "").strip()
+
+    _on_IA_chamada_concluida(pedido)
+
+    # só conta como sucesso se nome + preco estiverem presentes
+    if not nome or not preco:
+        return None
+    return {"nome": nome, "nicho": nicho, "preco": preco}
+
+
+def _classificar_erro_gemini(msg: str) -> tuple[str, str]:
+    """Classifica o erro de Gemini retornando (tipo, mensagem curta)."""
+    if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+        return "quota", "Cota esgotada (429). Aguarde alguns minutos e tente de novo."
+    if "503" in msg or "UNAVAILABLE" in msg:
+        return "instavel", "Serviço instável (503). Tente de novo em instantes."
+    if "GEMINI_API_KEY" in msg or "API_KEY" in msg:
+        return "chave", "Chave de API não configurada ou inválida."
+    if "INVALID_ARGUMENT" in msg:
+        return "parametro", "Parâmetro inválido enviado à API."
+    if "NOT_FOUND" in msg:
+        return "nao_encontrado", "Modelo não encontrado. Verifique a chave e os modelos disponíveis."
+    if "RATE_LIMIT" in msg or "RATE_LIMIT_EXCEEDED" in msg:
+        return "taxa", "Limite de requisições atingido. Reduza a frequência."
+    if "TIMEOUT" in msg or "DEADLINE_EXCEEDED" in msg:
+        return "tempo", "Tempo de espera excedido. O serviço está sob carga ou lento."
+    return "erro", str(msg)[:110]
+
+
+def _erro_gemini_detalhado(last_error: str) -> str:
+    """Gera uma mensagem amigável de erro para a UI, detalhando a causa por tipo."""
+    tipo, msg = _classificar_erro_gemini(last_error)
+    return f"Gemini falhou ({tipo}): {msg}"
 
 
 def _cadastro_navegador(url: str) -> dict | None:
@@ -776,46 +1064,224 @@ def _cadastro_navegador(url: str) -> dict | None:
 def extrair_cadastro(link: str) -> dict:
     """Preenche nome/nicho/preço de um produto só a partir do link.
 
-    Camadas:
-      1. Gemini + busca do Google (roda na nuvem, sem tocar na Shopee);
-      2. navegador real no PC local (a janela abre e fecha sozinha).
+    Ordem de tentativas (definida em PROGESSAO_CADASTRO):
+      1. Cache em memória (evita rechamar a IA)
+      2. Gemini + busca do Google (nuvem)
+      3. Navegador real no PC local (Playwright)
 
-    Retorna sempre {"nome", "nicho", "preco", "camada", "erro"}:
-    "camada" diz de onde vieram os dados ("ia" | "navegador"); "erro"
-    explica a falha (campos vazios) quando nenhuma camada funcionar.
+    Regras de qualidade:
+      - A camada só "conta" se entregar os 3 campos (nome, nicho, preco)
+        com dados válidos. Campos parciais geram fallback.
+      - Cross-check: se a IA e o navegador diferirem o preço em mais de
+        15%, usa o menor (mais conservador, mais próximo do preço final
+        com frete e impostos da Shopee).
+      - Nicho: prioridade é IA, depois DOM/nav, depois derivação do nome.
+
+    Retorna sempre {"nome", "nicho", "preco", "camada", "fonts_usadas",
+    "erro", "faltou_por_campo"}:
+    "camada" diz de onde vieram os dados ("ia" | "navegador" | ""
+    quando nenhum deu certo); "fonts_usadas" lista as fontes consultadas;
+    "faltou_por_campo" indica quais campos estavam ausentes nas fontes.
+    "erro" explica a falha quando não há dados.
     """
     link = (link or "").strip()
     if not link:
         return {"nome": "", "nicho": "", "preco": "", "camada": "",
-                "erro": "Cole o link do produto primeiro."}
+                "fonts_usadas": [], "erro": "Cole o link do produto primeiro.",
+                "faltou_por_campo": []}
+
+    url_norm = _resolve_short_url(link)
+
+    # 1. Cache em memória
+    cache = _cadastro_por_cache(url_norm)
+    if cache:
+        return {
+            "nome": cache.get("nome", ""),
+            "nicho": cache.get("nicho", ""),
+            "preco": cache.get("preco", ""),
+            "camada": "ia",
+            "fonts_usadas": ["cache"], 
+            "erro": "",
+            "faltou_por_campo": [],
+        }
 
     motivos: list[str] = []
-    achados: dict = {}
-    camada = ""
+    fonts_usadas: list[str] = []
+    campos_faltantes: set[str] = set()
 
+    # 2. Camada IA
     try:
         ia = _cadastro_por_ia(link)
     except Exception as exc:  # noqa: BLE001
         ia = None
         motivos.append(f"IA: {str(exc)[:110]}")
-    if ia and any(ia.get(k) for k in ("nome", "nicho", "preco")):
-        achados, camada = ia, "ia"
-    elif not motivos:
-        motivos.append("IA não achou o produto")
+    if ia is not None:
+        fonts_usadas.append("ia")
+        if ia.get("nome"):
+            ia_nome = ia["nome"]
+        else:
+            ia_nome = ""
+            campos_faltantes.add("nome")
+        if ia.get("preco"):
+            ia_preco = ia["preco"]
+        else:
+            ia_preco = ""
+            campos_faltantes.add("preco")
+        ia_nicho = ia.get("nicho", "")
+        if not ia_nicho:
+            campos_faltantes.add("nicho")
 
-    if not achados:
+    # 3. Camada navegador
+    nav = None
+    if not ia or (not ia.get("nome") or not ia.get("preco")):
         nav = _cadastro_navegador(link)
-        if nav and any(nav.get(k) for k in ("nome", "nicho", "preco")):
-            achados, camada = nav, "navegador"
+        if nav:
+            fonts_usadas.append("navegador")
+            if nav.get("nome"):
+                nav_nome = nav["nome"]
+            else:
+                nav_nome = ""
+                campos_faltantes.add("nome")
+            if nav.get("preco"):
+                nav_preco = nav["preco"]
+            else:
+                nav_preco = ""
+                campos_faltantes.add("preco")
+            nav_nicho = nav.get("nicho", "")
+            if not nav_nicho:
+                campos_faltantes.add("nicho")
         else:
             motivos.append("navegador local indisponível (nuvem ou captcha)")
 
-    if achados:
-        return {"nome": achados.get("nome", ""), "nicho": achados.get("nicho", ""),
-                "preco": achados.get("preco", ""), "camada": camada, "erro": ""}
-    return {"nome": "", "nicho": "", "preco": "", "camada": "",
-            "erro": "⚠️ Extração indisponível agora — preencha os campos à mão. "
-                    "Causas: " + " · ".join(motivos)}
+    # 4. Decide o resultado final
+    if ia and nav:
+        # Cross-check: se houver divergência de preço acima de 15%,
+        # usa o menor (mais conservador).
+        ia_preco_num = _extrair_numero_precificacao(ia.get("preco"))
+        nav_preco_num = _extrair_numero_precificacao(nav.get("preco"))
+        if ia_preco_num is not None and nav_preco_num is not None:
+            divergencia = abs(ia_preco_num - nav_preco_num) / max(ia_preco_num, nav_preco_num)
+            if divergencia > 0.15:
+                preco_final = min(ia_preco_num, nav_preco_num)
+                ia_preco = _borderar_preco(f"{preco_final:.2f}")
+                motivos.append(
+                    f"Preço divergente entre IA e navegador ({ia.get('preco')} vs {nav.get('preco')}); "
+                    f"usando menor ({preco_final:.2f})"
+                )
+
+        # Nome: prefere IA, se não, navegador
+        nome_final = ia.get("nome") or nav.get("nome") or ""
+        if not nome_final:
+            campos_faltantes.discard("nome")
+
+        # Nicho: prioridade IA, depois DOM/nav
+        nicho_final = ia.get("nicho") or nav.get("nicho") or ""
+        if not nicho_final:
+            nicho_derivado = _classificar_por_nome(nome_final)
+            if nicho_derivado:
+                nicho_final = nicho_derivado
+                motivos.append(f"Nicho derivado do nome: {nicho_final}")
+            else:
+                campos_faltantes.add("nicho")
+
+        # Preço final: preferência para o da IA, se disponível
+        preco_final = ia.get("preco")
+        if not preco_final and nav.get("preco"):
+            preco_final = nav["preco"]
+
+        if nome_final and preco_final:
+            _guardar_cadastro_cache(url_norm, {
+                "nome": nome_final,
+                "nicho": nicho_final,
+                "preco": preco_final,
+            })
+            return {
+                "nome": nome_final,
+                "nicho": nicho_final,
+                "preco": preco_final,
+                "camada": "ia",
+                "fonts_usadas": fonts_usadas,
+                "erro": "" if not motivos else " ".join(motivos[:2]),
+                "faltou_por_campo": sorted(campos_faltantes),
+            }
+
+    elif ia:
+        # Só IA: encerra logo se faltar algum campo crítico
+        if campos_faltantes:
+            _guardar_cadastro_cache(url_norm, {
+                "nome": ia.get("nome", ""),
+                "nicho": ia.get("nicho", ""),
+                "preco": ia.get("preco", ""),
+            })
+            if "nome" not in campos_faltantes and "preco" not in campos_faltantes:
+                return {
+                    "nome": ia.get("nome", ""),
+                    "nicho": ia.get("nicho", ""),
+                    "preco": ia.get("preco", ""),
+                    "camada": "ia",
+                    "fonts_usadas": ["ia"],
+                    "erro": "",
+                    "faltou_por_campo": sorted(campos_faltantes),
+                }
+        # IA parciairo: retorna o que conseguiu com aviso
+        return {
+            "nome": ia.get("nome", ""),
+            "nicho": ia.get("nicho", ""),
+            "preco": ia.get("preco", ""),
+            "camada": "ia",
+            "fonts_usadas": ["ia"],
+            "erro": "",
+            "faltou_por_campo": sorted(campos_faltantes),
+        }
+
+    elif nav:
+        if "nome" not in campos_faltantes and "preco" not in campos_faltantes:
+            _guardar_cadastro_cache(url_norm, {
+                "nome": nav["nome"],
+                "nicho": nav.get("nicho", ""),
+                "preco": nav["preco"],
+            })
+            return {
+                "nome": nav["nome"],
+                "nicho": nav.get("nicho", ""),
+                "preco": nav["preco"],
+                "camada": "navegador",
+                "fonts_usadas": ["navegador"],
+                "erro": "",
+                "faltou_por_campo": sorted(campos_faltantes),
+            }
+        return {
+            "nome": nav.get("nome", ""),
+            "nicho": nav.get("nicho", ""),
+            "preco": nav.get("preco", ""),
+            "camada": "navegador",
+            "fonts_usadas": ["navegador"],
+            "erro": "",
+            "faltou_por_campo": sorted(campos_faltantes),
+        }
+
+    # Nenhuma camada conseguiu
+    erro_detalhado = "⚠️ Extração indisponível agora — preencha os campos à mão."
+    if fonts_usadas:
+        if "ia" in fonts_usadas and "navegador" in fonts_usadas:
+            erro_detalhado += " As duas fontes falharam. Verifique a chave do Gemini e o acesso à internet."
+        elif "ia" in fonts_usadas:
+            erro_detalhado += " A camada de IA (Gemini + Google Search) não retornou dados. "
+            erro_detalhado += "Verifique a chave de API e a cota do serviço."
+        elif "navegador" in fonts_usadas:
+            erro_detalhado += " O navegador (Playwright) falhou ao abrir a página. "
+            erro_detalhado += "Verifique se o Chrome está aberto e se não há bloqueios."
+
+    return {
+        "nome": "",
+        "nicho": "",
+        "preco": "",
+        "camada": "",
+        "fonts_usadas": fonts_usadas,
+        "erro": erro_detalhado,
+        "erro_detalhado": erro_detalhado,
+        "faltou_por_campo": sorted(campos_faltantes),
+    }
 
 
 # ─── Roteador ────────────────────────────────────────────────────────────────

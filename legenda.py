@@ -56,10 +56,77 @@ Formato de saída (JSON exato):
 }"""
 
 
+# ─── Gerador por Templates de Alta Conversão (Fallback Instantâneo) ──────────
+
+def gerar_legenda_template(produto: Produto, estilo: str = "reels") -> LegendaInstagram:
+    """Gera legenda de alta conversão instantaneamente usando padrões validados de achadinhos."""
+    nome = produto.nome or "Achadinho Secreto"
+    preco = produto.preco or "XX,XX"
+    gancho = produto.gancho or f"Gente, achei esse {nome} e fiquei chocada com a qualidade!"
+    link = produto.link_vitrine or "no link da bio"
+    pid = produto.id or "01"
+    
+    # Nicho hashtags
+    nicho_raw = (produto.nicho or "achadinhos").lower().replace(" ", "").replace("&", "")
+    nicho_tag = f"#{nicho_raw}" if nicho_raw else "#achadinhos"
+    
+    hashtags_base = f"#achadinhos #achadosdashopee #shopeebrasil #comprinhas {nicho_tag} #dicas #comprasonline"
+
+    if estilo == "carrossel":
+        texto = (
+            f"Passa pro lado pra ver todos os detalhes desse achadinho que viralizou! ✨\n\n"
+            f"📌 {nome} — por apenas R$ {preco}\n\n"
+            f"Motivos pra garantir o seu hoje:\n"
+            f"✅ Custo-benefício que vale cada centavo\n"
+            f"✅ Produto super bem avaliado na plataforma\n"
+            f"✅ Praticidade garantida no dia a dia\n\n"
+            f"👉 Comente 'QUERO' que te mando o link direto no direct! Ou pegue no link da bio."
+        )
+        comentario = f"Link do {nome} (Achado {pid}) 👇\n{link}"
+        hashtags = f"{hashtags_base} #carrossel #reviewshopee #achadinhosreais"
+
+    elif estilo == "feed":
+        texto = (
+            f"Dica de ouro pra você economizar e ter o melhor em casa: conheça o {nome}!\n\n"
+            f"Preço promocional: R$ {preco} (aproveite enquanto durar o cupom).\n"
+            f"A qualidade surpreende e entrega muito mais do que promete.\n\n"
+            f"🔗 Link direto no link da nossa bio ou comente 'LINK' abaixo que te enviamos na hora!"
+        )
+        comentario = f"Comente LINK para receber o cupom exclusivo do {nome}!"
+        hashtags = f"{hashtags_base} #ofertas #descontos #feed #achados"
+
+    elif estilo == "stories":
+        texto = (
+            f"ALERTA PROMOÇÃO RELÂMPAGO! 🔥\n\n"
+            f"{nome} por apenas R$ {preco}!\n"
+            f"Restam poucas unidades com esse valor no estoque.\n\n"
+            f"Arrasta pra cima ou responda com 'QUERO' pra receber o link agora!"
+        )
+        comentario = f"Link rápido: {link}"
+        hashtags = f"{hashtags_base} #promocao #achadinho #urgente"
+
+    else:  # reels / tiktok (padrão)
+        texto = (
+            f"{gancho}\n\n"
+            f"Esse {nome} foi um dos melhores que já peguei na Shopee, custando apenas R$ {preco}. "
+            f"Resolve de verdade e o custo-benefício é surreal!\n\n"
+            f"🔥 Comente 'QUERO' que te envio o link direto no seu direct agora mesmo! 👇"
+        )
+        comentario = f"Link oficial aqui! 👇 {link} (Achado {pid})"
+        hashtags = f"{hashtags_base} #reelsbrasil #tiktokbrasil #achadinhosvirais"
+
+    return LegendaInstagram(
+        texto=texto,
+        hashtags=hashtags,
+        comentario_fixo=comentario,
+        estilo=estilo,
+    )
+
+
 # ─── Geração via Gemini ──────────────────────────────────────────────────────
 
 def _gerar_legenda_gemini(produto: Produto, estilo: str) -> LegendaInstagram:
-    """Gera legenda via Gemini."""
+    """Gera legenda via Gemini com fallback automático para template."""
     estilo_desc = {
         "reels": "Reels/TikTok — curta, direta, com CTA de comentar QUERO",
         "carrossel": "Carrossel — mais detalhada, com checklist e engajamento",
@@ -88,7 +155,6 @@ Responda APENAS com JSON válido (sem markdown):
             _SYSTEM_LEGENDA, user, temperature=0.5, response_mime_type="application/json"
         )
         # tenta extrair JSON
-        # remove markdown code block se tiver
         limpo = resposta.strip()
         if limpo.startswith("```"):
             limpo = limpo.split("\n", 1)[1]
@@ -97,20 +163,19 @@ Responda APENAS com JSON válido (sem markdown):
         limpo = limpo.strip()
 
         dados = json.loads(limpo)
+        texto = dados.get("texto", "").strip()
+        if not texto:
+            raise ValueError("Resposta Gemini não continha campo texto válido")
+            
         return LegendaInstagram(
-            texto=dados.get("texto", ""),
-            hashtags=dados.get("hashtags", ""),
-            comentario_fixo=dados.get("comentario_fixo", ""),
+            texto=texto,
+            hashtags=dados.get("hashtags", "").strip() or "#achadinhos #shopee",
+            comentario_fixo=dados.get("comentario_fixo", "").strip() or f"Link na bio (Achado {produto.id})",
             estilo=estilo,
         )
     except Exception as exc:
-        logger.error("Gemini falhou na legenda: %s", exc)
-        return LegendaInstagram(
-            texto=f"[ERRO GEMINI] Não foi possível gerar legenda para {produto.nome}",
-            hashtags="#achadinhos #shopee",
-            comentario_fixo="",
-            estilo=estilo,
-        )
+        logger.warning("Gemini falhou na legenda (%s) — acionando template otimizado", exc)
+        return gerar_legenda_template(produto, estilo)
 
 
 def gerar_legenda(produto: Produto, estilo: str = "reels") -> LegendaInstagram:

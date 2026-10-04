@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 # Os últimos três são fallbacks verificados (lite/preview costumam
 # ter fila menor quando os flash principais estão em 503/429).
 MODELOS_PADRAO: list[str] = [
-    "gemini-3.6-flash",
     "gemini-3.5-flash",
+    "gemini-3.6-flash",
     "gemini-flash-latest",
     "gemini-3.5-flash-lite",
     "gemini-flash-lite-latest",

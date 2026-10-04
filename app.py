@@ -365,8 +365,17 @@ if secao == "➕ Novo Produto":
             st.session_state["novo_link_af"] = link_atual
             if not (st.session_state.get("novo_id") or "").strip():
                 st.session_state["novo_id"] = proximo_id(st.session_state.produtos)
+
             if dados.get("erro"):
-                st.error(dados["erro"])
+                # Erro: aparece um aviso amigável com detalhes
+                if "quota" in dados.get("erro_detalhado", ""):
+                    st.warning(
+                        "⚠️ A IA está com cota esgotada (429). "
+                        "Aguarde alguns minutos e tente novamente."
+                    )
+                else:
+                    st.error(dados["erro"])
+
             else:
                 st.session_state["novo_nome"] = dados.get("nome", "")
                 st.session_state["novo_nicho"] = dados.get("nicho", "")
@@ -376,6 +385,15 @@ if secao == "➕ Novo Produto":
                     else "navegador local"
                 )
                 st.success(f"✅ Extraído ({origem}): {dados['nome'][:70]}")
+
+                # Log detalhado no console (útil para o usuário entender o que aconteceu)
+                fonts = dados.get("fonts_usadas", [])
+                if fonts:
+                    st.caption(
+                        f"Fonte(s): {', '.join(fonts)}. "
+                        f"Camada: {dados.get('camada', '') or '—'}; "
+                        f"campos faltantes: {', '.join(dados.get('faltou_por_campo', [])) or '—'}"
+                    )
 
     # 3) formulário — campos com key para receberem o auto-preenchimento
     with st.form("novo_produto"):

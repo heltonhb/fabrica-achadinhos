@@ -140,3 +140,42 @@ class TestConstruirVitrineEndToEnd:
         assert "Item 1" in html_gerado
         assert "Item 2" in html_gerado
         assert "Item Sem Link" not in html_gerado
+
+
+class TestProdutoDoMomentoEHero:
+    def test_selecionar_produto_postado_mais_recente(self):
+        p1 = Produto(id="#01", nome="Item 1", status="Ideia", link_afiliado="https://shopee/1")
+        p2 = Produto(id="#02", nome="Item 2", status="Postado", link_afiliado="https://shopee/2")
+        p3 = Produto(id="#03", nome="Item 3", status="Postado", link_afiliado="https://shopee/3")
+        p4 = Produto(id="#04", nome="Item 4", status="Ideia", link_afiliado="https://shopee/4")
+
+        selecionado = gerar_vitrine.selecionar_produto_do_momento([p1, p2, p3, p4])
+        assert selecionado is not None
+        assert selecionado.id == "#03"
+
+    def test_selecionar_fallback_quando_nenhum_postado(self):
+        p1 = Produto(id="#01", nome="Item 1", status="Ideia", link_afiliado="https://shopee/1")
+        p2 = Produto(id="#02", nome="Item 2", status="Roteiro Pronto", link_afiliado="https://shopee/2")
+
+        selecionado = gerar_vitrine.selecionar_produto_do_momento([p1, p2])
+        assert selecionado is not None
+        assert selecionado.id == "#02"
+
+    def test_extrair_numero_id(self):
+        assert gerar_vitrine.extrair_numero_id("#06") == "6"
+        assert gerar_vitrine.extrair_numero_id("#45") == "45"
+        assert gerar_vitrine.extrair_numero_id("100") == "100"
+        assert gerar_vitrine.extrair_numero_id("Item") == ""
+
+    def test_hero_card_e_grid_renderizados_no_html(self):
+        p1 = Produto(id="#01", nome="Item 1", status="Ideia", link_afiliado="https://shopee/1")
+        p2 = Produto(id="#06", nome="Meias Especiais", status="Postado", preco="15,00", link_afiliado="https://shopee/6")
+
+        html_gerado = gerar_vitrine.gerar_html_vitrine([p1, p2], {"#01": None, "#06": None}, produto_momento=p2)
+        assert 'id="heroSection"' in html_gerado
+        assert "VISTO NO ÚLTIMO VÍDEO" in html_gerado
+        assert "Meias Especiais" in html_gerado
+        assert "card-id-badge" in html_gerado
+        assert "inapp-banner" in html_gerado
+        assert "cards-grid" in html_gerado
+
