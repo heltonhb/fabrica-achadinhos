@@ -23,7 +23,7 @@ import requests
 # Imports do núcleo do projeto
 from config import BASE_DIR, ESTADOS, Produto, proximo_id, obter_segredo, ENV_PATH
 from sheets import ler_produtos, salvar_produtos
-from scripts.gerar_vitrine import construir_vitrine
+from scripts.gerar_vitrine import construir_vitrine, sincronizar_e_atualizar_vitrine
 from prompts import gerar_prompt_video, gerar_todos_prompts, ESTILOS
 from roteirista import gerar_ganchos, gerar_roteiro
 from legenda import gerar_legenda, gerar_legenda_template
@@ -429,18 +429,10 @@ def api_vitrine_status():
 @app.post("/api/vitrine/deploy")
 def api_vitrine_deploy():
     hook_url = obter_segredo("VERCEL_DEPLOY_HOOK")
-    if not hook_url:
-        raise HTTPException(status_code=400, detail="Deploy Hook da Vercel não configurado no .env")
-    try:
-        resp = requests.post(hook_url.strip(), timeout=12)
-        if resp.status_code in (200, 201):
-            return {
-                "sucesso": True,
-                "mensagem": "Deploy iniciado com sucesso na Vercel! A vitrine estará atualizada em ~30s."
-            }
-        raise HTTPException(status_code=resp.status_code, detail=f"Vercel retornou código {resp.status_code}: {resp.text}")
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Erro ao contatar a Vercel: {exc}")
+    ok, msg = sincronizar_e_atualizar_vitrine(hook_url)
+    if ok:
+        return {"sucesso": True, "mensagem": msg}
+    raise HTTPException(status_code=500, detail=msg)
 
 
 @app.post("/api/vitrine/gerar-local")

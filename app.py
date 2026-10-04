@@ -22,20 +22,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sheets import Produto, ler_produtos, salvar_produtos, _get_sheets_service
 from config import ESTADOS, proximo_id, obter_segredo, ENV_PATH
-from scripts.gerar_vitrine import construir_vitrine
+from scripts.gerar_vitrine import construir_vitrine, sincronizar_e_atualizar_vitrine
 
 
 def disparar_deploy_vitrine(hook_url: str) -> tuple[bool, str]:
-    """Dispara um novo build na Vercel via Deploy Hook HTTP POST."""
-    if not hook_url:
-        return False, "Nenhum Deploy Hook configurado."
-    try:
-        resp = requests.post(hook_url.strip(), timeout=12)
-        if resp.status_code in (200, 201):
-            return True, "Deploy iniciado com sucesso na Vercel! Em ~30s a vitrine estará atualizada com a planilha."
-        return False, f"Vercel retornou código {resp.status_code}: {resp.text}"
-    except Exception as exc:
-        return False, f"Falha ao conectar com a Vercel: {exc}"
+    """Sincroniza novas fotos e dados locais com o GitHub e dispara deploy na Vercel."""
+    return sincronizar_e_atualizar_vitrine(hook_url)
+
 
 from prompts import (
     gerar_prompt_video,

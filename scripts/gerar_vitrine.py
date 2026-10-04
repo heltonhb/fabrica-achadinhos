@@ -1142,6 +1142,65 @@ def construir_vitrine(
     }
 
 
+def sincronizar_e_atualizar_vitrine(hook_url: str = "") -> tuple[bool, str]:
+    """Sincroniza a vitrine com o GitHub e a Vercel com 1 clique.
+
+    1. Constrói a vitrine estática local com imagens e dados mais recentes.
+    2. Adiciona 'vitrine/assets/' e 'achados.csv' ao Git.
+    3. Se houver novas fotos ou arquivos modificados, faz commit e git push para o GitHub.
+    4. Se não houve push (ex: nenhuma foto nova local) mas há Deploy Hook, dispara o webhook da Vercel.
+    """
+    import subprocess
+    import requests
+
+    # 1. Constrói vitrine local
+    try:
+        construir_vitrine()
+    except Exception as exc:
+        logger.warning("Aviso ao construir vitrine local: %s", exc)
+
+    # 2. Checa e envia novas fotos ou dados locais para o GitHub
+    push_feito = False
+    try:
+        subprocess.run(["git", "add", "vitrine/assets/", "achados.csv"], check=True, cwd=str(BASE_DIR))
+        diff_proc = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=str(BASE_DIR))
+        if diff_proc.returncode != 0:
+            subprocess.run(
+                ["git", "commit", "-m", "auto: atualiza fotos da vitrine e catalogo"],
+                check=True,
+                cwd=str(BASE_DIR)
+            )
+            push_proc = subprocess.run(
+                ["git", "push", "origin", "main"],
+                capture_output=True,
+                text=True,
+                cwd=str(BASE_DIR)
+            )
+            if push_proc.returncode == 0:
+                push_feito = True
+                logger.info("Git push de assets/vitrine executado com sucesso.")
+            else:
+                logger.warning("Falha ao dar git push: %s", push_proc.stderr)
+    except Exception as exc:
+        logger.warning("Erro no processo de git push automático: %s", exc)
+
+    # 3. Dispara o Deploy Hook se configurado e não houve push
+    if hook_url and not push_feito:
+        try:
+            resp = requests.post(hook_url.strip(), timeout=12)
+            if resp.status_code in (200, 201):
+                return True, "Deploy iniciado com sucesso na Vercel! O site estará atualizado em ~30s."
+            return False, f"Vercel retornou código {resp.status_code}: {resp.text}"
+        except Exception as exc:
+            return False, f"Erro ao disparar Deploy Hook: {exc}"
+
+    if push_feito:
+        return True, "✅ Novas fotos e dados enviados para o GitHub com sucesso! O deploy na Vercel foi iniciado automaticamente (~30s)."
+
+    return True, "Vitrine já está sincronizada e atualizada!"
+
+
+
 if __name__ == "__main__":
     res = construir_vitrine()
     print("\n" + "=" * 50)
