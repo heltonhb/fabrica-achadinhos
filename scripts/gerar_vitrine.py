@@ -93,6 +93,16 @@ def encontrar_ou_copiar_imagem(
     name_suffix = slug.split("_", 1)[-1] if "_" in slug else slug
     num_id = p.id.replace("#", "").strip()
 
+    # 0. Checa se o usuário colocou a foto diretamente por ID simples (ex: 06.jpg, 6.jpg, #06.jpg)
+    nomes_simples = [num_id, num_id.lstrip("0"), p.id.replace("#", ""), p.id]
+    for n in nomes_simples:
+        if not n:
+            continue
+        for ext in (".jpg", ".jpeg", ".webp", ".png"):
+            candidato = assets_path / f"{n}{ext}"
+            if candidato.exists() and candidato.is_file():
+                return f"assets/{candidato.name}"
+
     # 1. Checa se já existe no vitrine/assets com o slug exato
     for ext in (".jpg", ".jpeg", ".webp", ".png"):
         candidato = assets_path / f"{slug}{ext}"
@@ -121,10 +131,17 @@ def encontrar_ou_copiar_imagem(
     pastas_candidatas.append(m_dir / slug)
 
     if m_dir.exists():
+        # Palavras-chave do nome do produto para evitar associar pasta de outro produto
+        nome_tokens = [w for w in re.sub(r"[^a-zA-Z0-9]", " ", p.nome.lower()).split() if len(w) > 3]
+
         for sub in m_dir.iterdir():
             if not sub.is_dir():
                 continue
-            if (num_id and sub.name.startswith(f"{num_id}_")) or (name_suffix and sub.name.endswith(name_suffix)):
+            sub_lower = sub.name.lower()
+            tem_nome_parecido = any(t in sub_lower for t in nome_tokens) if nome_tokens else True
+
+            # Só aceita pasta com mesmo prefixo de ID se também tiver coerência de nome
+            if (num_id and sub.name.startswith(f"{num_id}_") and tem_nome_parecido) or (name_suffix and sub.name.endswith(name_suffix)):
                 if sub not in pastas_candidatas:
                     pastas_candidatas.append(sub)
 
