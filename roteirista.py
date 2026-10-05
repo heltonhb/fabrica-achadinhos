@@ -38,8 +38,9 @@ logger = logging.getLogger(__name__)
 # ─── System prompts ───────────────────────────────────────────────────────────
 
 _SYSTEM_ROTEIRO = """\
-Atue como roteirista de vídeos curtos de vendas para TikTok e Reels,
+Atue como roteirista de vídeos curtos de vendas para YouTube Shorts, TikTok e Instagram Reels,
 especialista em achadinhos de marketplace (Shopee) do Brasil.
+Seu foco é retenção máxima (técnica de loop contínuo) e conversão direta para o link do perfil/canal.
 Responda APENAS com JSON válido, sem markdown, sem texto extra."""
 
 _SYSTEM_GANCHOS = """\
@@ -79,13 +80,17 @@ Responda com este JSON:
 
 _USER_ROTEIRO = """\
 Escreva um roteiro de exatamente 20 segundos para o produto: {nome}
+Código do produto / ID: #{num}
+Preço: R$ {preco}
 Dor / utilidade principal: {dor}
 Estilo/persona do vídeo: {estilo_label} — {estilo_desc}
 {secao_clipes}
 O vídeo deve seguir esta estrutura:
 1. GANCHO nos primeiros 3 segundos — use exatamente: "{gancho}"
 2. DEMONSTRAÇÃO de duas funcionalidades práticas
-3. CTA: comentar "QUERO" para receber o link por DM
+3. CTA e LOOP nos últimos 5 segundos:
+   - Para YouTube Shorts e Vitrine: instrua que o link oficial com desconto está no perfil do canal e que é o achadinho #{num} na vitrine.
+   - TÉCNICA DE LOOP INFINITO: a última frase deve terminar conectando naturalmente ao início do gancho (sem despedidas como "tchau", "curta e compartilhe" ou "se inscreve").
 
 Adapte ritmo, vocabulário e tom à persona acima sem violar as regras de formato.
 
@@ -96,11 +101,18 @@ Regras:
 {instrucao_clipes}
 Responda com exatamente este JSON:
 {{
- "locucao": "texto completo da locução, sem marcações de tempo",
+ "locucao": "texto completo da locução, citando o código #{num} e link no canal",
  "cortes": ["gancho (0-3s)", "funcionalidade 1 (3-8s)", "funcionalidade 2 (8-13s)", "CTA (13-20s)"],
+ "texto_na_tela": ["texto curto impacto corte 1", "texto corte 2", "texto corte 3", "🔗 Link no perfil | Código #{num}"],
+ "titulos_shorts": [
+   "Título curto 1 para Shorts com gancho (máx 50 carac) #Shorts",
+   "Título curto 2 focado em curiosidade #Shorts",
+   "Título curto 3 com preço/oferta #Shorts"
+ ],
  "legenda": "legenda para Instagram Reels e TikTok com gatilho de curiosidade e CTA de comentar QUERO",
- "hashtags": ["achadinhos", "shopee"],
- "comentario_fixo": "Link do produto {num} disponível no link da minha bio!"
+ "hashtags": ["achadinhos", "shopee", "comprinhas"],
+ "comentario_fixo_shorts": "🛒 O link oficial desse achadinho tá fixado no perfil do canal! É o produto #{num} na nossa vitrine.",
+ "comentario_fixo": "Link do produto #{num} disponível no perfil/bio!"
 }}"""
 
 
@@ -205,6 +217,7 @@ def gerar_roteiro(produto: Produto, estilo: str = "chocante") -> dict | None:
 
     user_prompt = _USER_ROTEIRO.format(
         nome=produto.nome,
+        preco=produto.preco or "XX,XX",
         dor=dor,
         gancho=gancho,
         num=num,
@@ -225,7 +238,29 @@ def gerar_roteiro(produto: Produto, estilo: str = "chocante") -> dict | None:
         if "locucao" not in dados:
             raise ValueError("JSON sem chave 'locucao'")
         if "comentario_fixo" in dados:
-            dados["comentario_fixo"] = dados["comentario_fixo"].replace("NN", num)
+            dados["comentario_fixo"] = str(dados["comentario_fixo"]).replace("NN", num)
+        else:
+            dados["comentario_fixo"] = f"Link do produto #{num} disponível no link do perfil!"
+
+        # Garante campos para Shorts e texto na tela se a IA omitir
+        if not dados.get("comentario_fixo_shorts"):
+            dados["comentario_fixo_shorts"] = (
+                f"🛒 O link oficial desse achadinho tá fixado no perfil do canal! É o produto #{num} na nossa vitrine."
+            )
+        if not dados.get("titulos_shorts"):
+            dados["titulos_shorts"] = [
+                f"Esse achadinho me surpreendeu! #{num} #Shorts",
+                f"Não compre antes de ver isso! #{num} #Shorts",
+                f"Achadinho da Shopee por R$ {produto.preco or 'XX'} #Shorts",
+            ]
+        if not dados.get("texto_na_tela"):
+            dados["texto_na_tela"] = [
+                f"🔥 ACHADINHO #{num}",
+                "Olha essa função!",
+                f"R$ {produto.preco or 'XX,XX'}",
+                f"🔗 Link no canal | Código #{num}",
+            ]
+
         # registra se foi gerado com clipes reais e o estilo usado
         dados["_meta"] = {
             "com_clipes": bool(clipes),

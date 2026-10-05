@@ -164,41 +164,86 @@ def montar_pacote(
     estilo: str = "chocante",
     gancho_texto: str = "",
 ) -> Path:
-    """Gera pacote_post.txt com tudo que vai pro Meta Suite / TikTok Studio."""
-    r = p.roteiro
+    """Gera pacote_post.txt com tudo que vai pro YouTube Studio, Meta Suite e TikTok."""
+    r = p.roteiro or {}
     num = p.id.replace("#", "")
     estilo_label = ESTILOS.get(estilo, {}).get("label", estilo)
 
+    # Títulos para YouTube Shorts
+    titulos = r.get("titulos_shorts") or [
+        f"Melhor achadinho da Shopee! #{num} #Shorts",
+        f"Não compre antes de ver isso! #{num} #Shorts",
+        f"Esse achadinho me surpreendeu #{num} #Shorts",
+    ]
+    titulos_txt = "\n".join(f"  • {t}" for t in titulos)
+
+    # Textos na tela (Overlays)
+    textos_tela = r.get("texto_na_tela") or []
+    textos_tela_txt = (
+        "\n".join(f"  [{i+1}] {txt}" for i, txt in enumerate(textos_tela))
+        if textos_tela
+        else "  • Gancho visual impactante | Código #{num}"
+    )
+
+    comentario_shorts = r.get(
+        "comentario_fixo_shorts",
+        f"🛒 O link oficial desse achadinho tá fixado no perfil do canal! É o produto #{num} na nossa vitrine.",
+    )
+
+    comentario_insta = r.get(
+        "comentario_fixo",
+        f"Link do produto #{num} disponível no link da minha bio!",
+    )
+
     linhas = [
         f"═══ ACHADINHO {p.id} — {p.nome} ═══",
+        f"Preço: R$ {p.preco or 'XX,XX'} | Código da Vitrine: #{num}",
         f"Estilo: {estilo_label}",
         f"Gancho usado: {gancho_texto or p.gancho}",
         "",
         "▶ VÍDEO: gerar no Google Vids (prompt na seção 🤖 Gerar Prompt)",
         "",
-        "── LEGENDA (copiar/colar) ──",
+        "── 🔴 YOUTUBE SHORTS (Alta Conversão) ──",
+        "Sugestões de Título (SEO & CTR):",
+        titulos_txt,
+        "",
+        "Comentário para FIXAR no Shorts (copiar/colar):",
+        comentario_shorts,
+        "",
+        "Textos na tela recomendados (Overlays):",
+        textos_tela_txt,
+        "",
+        "Tags do Shorts:",
+        "#Shorts #achadinhos #shopee #comprinhas #achadosdashopee",
+        "",
+        "── 📸 INSTAGRAM REELS ──",
+        "Legenda (copiar/colar):",
         r.get("legenda", ""),
         "",
-        "── HASHTAGS ──",
+        "Hashtags:",
         " ".join("#" + h.lstrip("#") for h in r.get("hashtags", [])),
         "",
-        "── COMENTÁRIO PARA FIXAR (TikTok/Shorts) ──",
-        r.get("comentario_fixo", f"Link do produto {num} disponível no link da minha bio!"),
+        "Comentário para FIXAR no Reels:",
+        comentario_insta,
         "",
-        "── REGRAS MANYCHAT (Instagram) ──",
+        "Regras ManyChat (Instagram DM):",
         'Se comentar "QUERO" ou "EU QUERO" → DM automática:',
         f"Link do produto: {p.link_afiliado}",
         "",
-        "── SUGESTÃO DE AGENDA ──",
-        "Instagram Reels: 12:00, 18:00 ou 21:00 (horário de pico)",
-        "TikTok: mesmo vídeo, 1h depois do Reels",
-        "YouTube Shorts: reutilizar do TikTok",
+        "── 🎵 TIKTOK ──",
+        "Comentário para FIXAR:",
+        f"Link do produto #{num} no link da bio! Corre pra garantir antes de esgotar 🔥",
         "",
-        "── LINKS ──",
-        f"Afiliado Shopee: {p.link_afiliado}",
-        f"Vitrine/Bio: {p.link_vitrine}",
+        "── 🔗 LINKS E ACESSO ──",
+        f"Vitrine Oficial: {p.link_vitrine or 'https://seusite.com'} (Código #{num})",
+        f"Afiliado Direto Shopee: {p.link_afiliado}",
         "",
-        "── RASTREABILIDADE ──",
+        "── ⏰ SUGESTÃO DE AGENDA ──",
+        "YouTube Shorts: 11:30 ou 19:00 (pico de busca e engajamento)",
+        "Instagram Reels: 12:00, 18:00 ou 21:00",
+        "TikTok: mesmo vídeo, 1h após o Reels",
+        "",
+        "── 📋 RASTREABILIDADE ──",
         f"Gerado com estilo: {estilo_label}",
         f"Clipes usados: {r.get('_meta', {}).get('n_clipes', '?')}",
         f"Gancho ângulo: {_angulo_do_gancho(p.pasta)}",

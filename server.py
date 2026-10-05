@@ -26,6 +26,7 @@ from sheets import ler_produtos, salvar_produtos
 from scripts.gerar_vitrine import construir_vitrine, sincronizar_e_atualizar_vitrine
 from prompts import gerar_prompt_video, gerar_todos_prompts, ESTILOS
 from roteirista import gerar_ganchos, gerar_roteiro
+from pipeline import processar_produto
 from legenda import gerar_legenda, gerar_legenda_template
 from scraping import extrair_cadastro, baixar_todas_midias
 from midia import resumo_midia
@@ -83,6 +84,12 @@ class GerarLegendaReq(BaseModel):
     produto_id: str
     estilo: Optional[str] = "reels"
     apenas_template: Optional[bool] = False
+
+class ExecutarPipelineReq(BaseModel):
+    produto_id: str
+    estilo: Optional[str] = "chocante"
+    forcar: Optional[bool] = False
+    usar_ganchos: Optional[bool] = True
 
 
 # ─── Utilitários de Cache / Produtos ──────────────────────────────────────────
@@ -358,6 +365,47 @@ async def api_gerar_legenda(req: GerarLegendaReq):
         }
 
 
+@app.post("/api/ia/pipeline")
+async def api_executar_pipeline(req: ExecutarPipelineReq):
+    p = buscar_produto_por_id(req.produto_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+
+    loop = asyncio.get_event_loop()
+    try:
+        res = await loop.run_in_executor(
+            executor,
+            processar_produto,
+            p,
+            req.forcar or False,
+            req.estilo or "chocante",
+            req.usar_ganchos if req.usar_ganchos is not None else True,
+        )
+        pacote_path = res.get("pacote")
+        pacote_texto = ""
+        if pacote_path and Path(pacote_path).exists():
+            pacote_texto = Path(pacote_path).read_text(encoding="utf-8")
+
+        # Atualiza status e cache
+        produtos = carregar_ou_atualizar_produtos()
+        for prod in produtos:
+            if prod.id == p.id:
+                prod.status = p.status
+                break
+        salvar_produtos(produtos)
+
+        return {
+            "sucesso": True,
+            "produto_id": p.id,
+            "log": res.get("log", []),
+            "pacote_texto": pacote_texto,
+            "roteiro": p.roteiro,
+        }
+    except Exception as e:
+        logger.error(f"Erro ao processar pipeline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─── Endpoints de Scraping & Mídias ───────────────────────────────────────────
 
 @app.post("/api/scraping/extrair")
@@ -418,7 +466,7 @@ class ConfigHookReq(BaseModel):
 @app.get("/api/vitrine/status")
 def api_vitrine_status():
     hook_url = obter_segredo("VERCEL_DEPLOY_HOOK")
-    vitrine_url = obter_segredo("VERCEL_VITRINE_URL") or "https://fabrica-achadinhos.vercel.app"
+    vitrine_url = obter_segredo("VERCEL_VITRINE_URL") or "https://fabrica-achadinhos-three.vercel.app"
     return {
         "vitrine_url": vitrine_url,
         "tem_hook": bool(hook_url),

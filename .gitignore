@@ -40,5 +40,10 @@ fonts/*.ttf
 vitrine/index.html
 !vitrine/assets/*.jpg
 !vitrine/assets/*.jpeg
+!vitrine/assets/*.png
 !vitrine/assets/*.webp
+!vitrine/assets/*.JPG
+!vitrine/assets/*.JPEG
+!vitrine/assets/*.PNG
+!vitrine/assets/*.WEBP
 !vitrine/assets/.gitkeep

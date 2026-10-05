@@ -129,10 +129,11 @@
               <span class="px-1.5 py-0.5 rounded-full bg-secondary-container/20 text-secondary text-[10px] font-bold border border-secondary/30">+ NOVO</span>
             </button>
             
-            <!-- 4. Pipeline IA -->
-            <button @click="abaAtiva = 'pipeline'" :class="abaAtiva === 'pipeline' ? 'bg-surface-container-highest text-primary border-l-2 border-primary' : 'text-on-surface-variant hover:bg-surface-container-high/40 hover:text-on-surface'" class="flex items-center gap-3 px-3 py-2 rounded-lg font-semibold text-sm transition-all duration-150 text-left">
-              <span class="material-symbols-outlined text-[20px]">auto_fix_high</span>
+            <!-- 4. Pipeline IA Multiplataforma -->
+            <button @click="abrirModalPipeline()" class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high/40 hover:text-on-surface font-semibold text-sm transition-all duration-150 text-left group">
+              <span class="material-symbols-outlined text-[20px] text-primary group-hover:scale-110 transition-transform">auto_fix_high</span>
               <span class="flex-1">Pipeline IA</span>
+              <span class="px-1.5 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold border border-primary/30">SHORTS</span>
             </button>
 
             <!-- 5. Estúdio de Legendas & Copy -->
@@ -563,6 +564,20 @@
                   </button>
                 </div>
 
+                <!-- Plataforma do Vídeo: 🔴 Shorts | 🎬 Reels | 🎵 TikTok -->
+                <div class="flex items-center gap-1 bg-surface-container-lowest p-1 rounded-lg border border-outline-variant/30">
+                  <button v-for="plat in [
+                    { id: 'shorts', label: '🔴 Shorts (YouTube)' },
+                    { id: 'reels', label: '🎬 Reels (Instagram)' },
+                    { id: 'tiktok', label: '🎵 TikTok' }
+                  ]" :key="plat.id"
+                    @click="plataformaPrompt = plat.id"
+                    :class="plataformaPrompt === plat.id ? 'bg-primary-container text-white font-bold shadow-sm' : 'text-on-surface-variant hover:text-on-surface'"
+                    class="flex-1 py-1 px-1 rounded-md text-[11px] transition-all flex items-center justify-center">
+                    {{ plat.label }}
+                  </button>
+                </div>
+
                 <!-- Tabs: Parte 1 | Parte 2 | Ambas -->
                 <div class="flex items-center gap-1 bg-surface-container-lowest p-1 rounded-lg border border-outline-variant/30">
                   <button @click="abaPrompt = 'parte1'" 
@@ -654,9 +669,10 @@
                   </button>
                 </div>
 
-                <!-- Formato Tabs: Reels | Carrossel | Feed | Stories -->
+                <!-- Formato Tabs: Shorts | Reels | Carrossel | Feed | Stories -->
                 <div class="flex items-center gap-1 bg-surface-container-lowest p-1 rounded-lg border border-outline-variant/30">
                   <button v-for="est in [
+                    { id: 'shorts', label: '🔴 Shorts' },
                     { id: 'reels', label: '🎬 Reels' },
                     { id: 'carrossel', label: '📸 Carrossel' },
                     { id: 'feed', label: '📱 Feed' },
@@ -826,8 +842,9 @@
             <!-- Format Pills -->
             <div class="flex flex-col gap-1.5">
               <label class="text-xs font-semibold text-on-surface-variant">Formato & Plataforma:</label>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 <button v-for="est in [
+                  { id: 'shorts', label: '🔴 YouTube Shorts', desc: 'Link no canal' },
                   { id: 'reels', label: '🎬 Reels / TikTok', desc: 'Curto & CTA' },
                   { id: 'carrossel', label: '📸 Carrossel', desc: 'Checklist' },
                   { id: 'feed', label: '📱 Feed Post', desc: 'Informativo' },
@@ -1021,6 +1038,92 @@
       </div>
     </div>
 
+    <!-- ==================== MODAL PIPELINE IA MULTIPLATAFORMA ==================== -->
+    <div v-if="modalPipeline" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
+      <div class="w-full max-w-3xl rounded-2xl bg-surface-container-low border border-primary/40 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <!-- Header -->
+        <div class="p-5 border-b border-outline-variant/20 flex items-center justify-between bg-surface-container">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center text-primary border border-primary/40">
+              <span class="material-symbols-outlined text-[22px]">auto_fix_high</span>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-on-surface flex items-center gap-2">
+                <span>Pipeline IA — Pacote de Post Multiplataforma</span>
+                <span class="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold border border-primary/30">SHORTS + REELS + TIKTOK</span>
+              </h3>
+              <p class="text-xs text-on-surface-variant font-medium">
+                Gera gancho, roteiro de 20s com técnica de loop, textos de tela e pacote completo de publicação.
+              </p>
+            </div>
+          </div>
+          <button @click="modalPipeline = false" class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+            <span class="material-symbols-outlined text-[22px]">close</span>
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 flex flex-col gap-4 overflow-y-auto">
+          <!-- Produto e Configuração -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-on-surface-variant">Produto Ativo:</label>
+              <select v-model="produtoSelecionadoId" @change="onMudarProdutoId()" class="p-2.5 rounded-lg bg-surface-container border border-outline-variant/40 text-xs font-medium text-on-surface focus:outline-none focus:border-primary">
+                <option v-for="p in produtos" :key="p.ID" :value="p.ID">
+                  [{{ p.ID }}] {{ p['Nome do Produto'] }}
+                </option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-on-surface-variant">Estilo / Persona:</label>
+              <select v-model="estiloGancho" class="p-2.5 rounded-lg bg-surface-container border border-outline-variant/40 text-xs font-medium text-on-surface focus:outline-none focus:border-primary">
+                <option v-for="est in estilosDisponiveis" :key="est.id" :value="est.id">
+                  {{ est.icone }} {{ est.label }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Botão Executar -->
+          <button @click="executarPipeline()" :disabled="carregandoPipeline || !produtoSelecionado" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-primary-container to-inverse-primary text-white font-bold text-xs flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(160,120,255,0.4)] active:scale-95 transition-all disabled:opacity-50">
+            <span v-if="!carregandoPipeline" class="material-symbols-outlined text-[18px]">rocket_launch</span>
+            <span v-else class="animate-spin material-symbols-outlined text-[18px]">progress_activity</span>
+            <span>{{ carregandoPipeline ? 'Processando Pipeline (Gancho → Roteiro → Pacote)...' : '🚀 Executar Pipeline Completo' }}</span>
+          </button>
+
+          <!-- Log de Execução -->
+          <div v-if="logPipeline.length > 0" class="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/30 flex flex-col gap-1 font-mono text-[11px] text-on-surface-variant">
+            <div v-for="(l, idx) in logPipeline" :key="idx" class="flex items-center gap-1.5">
+              <span class="text-secondary text-[12px]">✓</span>
+              <span>{{ l }}</span>
+            </div>
+          </div>
+
+          <!-- Pacote Gerado -->
+          <div v-if="pacotePipelineTexto" class="flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-secondary text-[16px]">description</span>
+                Pacote de Post Gerado (pacote_post.txt)
+              </label>
+              <button @click="copiarPacotePipeline()" class="px-3 py-1 rounded-lg bg-secondary/20 hover:bg-secondary/30 text-secondary border border-secondary/40 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 shadow-sm">
+                <span class="material-symbols-outlined text-[14px]">content_copy</span> COPIAR PACOTE COMPLETO
+              </button>
+            </div>
+            <textarea :value="pacotePipelineTexto" readonly rows="12" class="w-full p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/30 font-mono text-on-surface text-xs leading-relaxed focus:outline-none resize-y"></textarea>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="p-4 border-t border-outline-variant/20 bg-surface-container flex items-center justify-between">
+          <span class="text-[11px] text-on-surface-variant">Vídeo final gerado no Google Vids com os prompts correspondentes.</span>
+          <button @click="modalPipeline = false" class="px-4 py-1.5 rounded-xl bg-surface-container-high text-xs text-on-surface font-medium hover:bg-surface-bright transition-colors">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ==================== MODAL CONFIGURAR HOOK VITRINE ==================== -->
     <div v-if="modalVitrineHook" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
       <div class="w-full max-w-md rounded-2xl bg-surface-container-high border border-outline-variant/40 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -1101,15 +1204,21 @@
         const promptParte1 = ref('');
         const promptParte2 = ref('');
         const abaPrompt = ref('parte1'); // 'parte1', 'parte2', 'ambas'
+        const plataformaPrompt = ref('shorts'); // 'shorts', 'reels', 'tiktok'
         const carregandoPrompt = ref(false);
         const carregandoLegenda = ref(false);
         const modalLegenda = ref(false);
-        const estiloLegenda = ref('reels'); // 'reels', 'carrossel', 'feed', 'stories'
+        const estiloLegenda = ref('shorts'); // 'shorts', 'reels', 'carrossel', 'feed', 'stories'
         const legendaTexto = ref('');
         const legendaHashtags = ref('');
         const legendaComentarioFixo = ref('');
         const modoLegendaGerada = ref(''); // 'ia' ou 'template'
         const salvandoLegenda = ref(false);
+
+        const modalPipeline = ref(false);
+        const carregandoPipeline = ref(false);
+        const pacotePipelineTexto = ref('');
+        const logPipeline = ref([]);
 
         const modalNovo = ref(false);
         const carregandoScrape = ref(false);
@@ -1136,7 +1245,7 @@
 
         // ─── Vitrine Shopee Online ───────────────────────────────────────────
         const vitrineStatus = ref({
-          vitrine_url: 'https://fabrica-achadinhos.vercel.app',
+          vitrine_url: 'https://fabrica-achadinhos-three.vercel.app',
           tem_hook: false
         });
         const carregandoDeploy = ref(false);
@@ -1386,7 +1495,7 @@
               body: JSON.stringify({ 
                 produto_id: produtoSelecionado.value.ID,
                 estilo: estiloGancho.value,
-                plataforma: 'reels'
+                plataforma: plataformaPrompt.value
               })
             });
             const data = await res.json();
@@ -1535,6 +1644,56 @@
           }
         }
 
+        function abrirModalPipeline() {
+          if (!produtoSelecionado.value && produtos.value.length > 0) {
+            selecionarProduto(produtos.value[0]);
+          }
+          modalPipeline.value = true;
+        }
+
+        async function executarPipeline() {
+          if (!produtoSelecionado.value) {
+            mostrarToast('Selecione um produto primeiro', 'erro');
+            return;
+          }
+          carregandoPipeline.value = true;
+          logPipeline.value = [];
+          pacotePipelineTexto.value = '';
+          try {
+            const res = await fetch('/api/ia/pipeline', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                produto_id: produtoSelecionado.value.ID,
+                estilo: estiloGancho.value,
+                forcar: true,
+                usar_ganchos: true
+              })
+            });
+            const data = await res.json();
+            if (data.sucesso) {
+              logPipeline.value = data.log || [];
+              pacotePipelineTexto.value = data.pacote_texto || '';
+              if (produtoSelecionado.value) {
+                produtoSelecionado.value.Status = 'Roteiro Pronto';
+              }
+              carregarMetricas();
+              mostrarToast('🚀 Pipeline executado com sucesso!');
+            } else {
+              mostrarToast(data.detail || 'Erro ao executar pipeline', 'erro');
+            }
+          } catch (e) {
+            console.error(e);
+            mostrarToast('Falha na comunicação com o servidor', 'erro');
+          } finally {
+            carregandoPipeline.value = false;
+          }
+        }
+
+        function copiarPacotePipeline() {
+          copiarTexto(pacotePipelineTexto.value, 'Pacote de post completo copiado!');
+        }
+
         function copiarLegendaCompleta() {
           const completa = (legendaTexto.value ? legendaTexto.value + '\n\n' : '') + (legendaHashtags.value || '');
           copiarTexto(completa.trim(), 'Legenda completa + hashtags copiada!');
@@ -1666,6 +1825,7 @@
           promptParte1,
           promptParte2,
           abaPrompt,
+          plataformaPrompt,
           carregandoPrompt,
           carregandoLegenda,
           modalNovo,
@@ -1678,6 +1838,13 @@
           legendaComentarioFixo,
           modoLegendaGerada,
           salvandoLegenda,
+          modalPipeline,
+          carregandoPipeline,
+          pacotePipelineTexto,
+          logPipeline,
+          abrirModalPipeline,
+          executarPipeline,
+          copiarPacotePipeline,
           toast,
           recarregarDados,
           selecionarProduto,

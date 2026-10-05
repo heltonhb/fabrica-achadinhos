@@ -86,3 +86,49 @@ def test_api_vitrine_deploy_sem_hook():
     assert response.status_code in (200, 400)
 
 
+def test_gerar_legenda_shorts_api():
+    res_lista = client.get("/api/produtos")
+    primeiro_id = res_lista.json()[0]["ID"]
+
+    response = client.post("/api/ia/legenda", json={
+        "produto_id": primeiro_id,
+        "estilo": "shorts",
+        "apenas_template": True
+    })
+    assert response.status_code == 200
+    dados = response.json()
+    assert dados["sucesso"] is True
+    assert "#Shorts" in dados["hashtags"]
+    assert "canal" in dados["comentario_fixo"].lower() or "vitrine" in dados["comentario_fixo"].lower()
+
+
+def test_api_pipeline_executar(monkeypatch, tmp_path):
+    import server
+
+    res_lista = client.get("/api/produtos")
+    primeiro_id = res_lista.json()[0]["ID"]
+
+    # Mock do processar_produto para ser rápido e testar integração
+    monkeypatch.setattr(
+        server,
+        "processar_produto",
+        lambda prod, forcar, estilo, usar_ganchos: {
+            "ok": True,
+            "log": ["gancho gerado", "pacote pronto"],
+            "pacote": str(tmp_path / "pacote_post.txt"),
+        }
+    )
+    (tmp_path / "pacote_post.txt").write_text("═══ ACHADINHO YOUTUBE SHORTS ═══", encoding="utf-8")
+
+    response = client.post("/api/ia/pipeline", json={
+        "produto_id": primeiro_id,
+        "estilo": "chocante",
+        "forcar": True
+    })
+    assert response.status_code == 200
+    dados = response.json()
+    assert dados["sucesso"] is True
+    assert "ACHADINHO YOUTUBE SHORTS" in dados["pacote_texto"]
+
+
+

@@ -119,7 +119,7 @@ def _gerar_prompts_salvos(params: dict) -> list:
     p = params["produto"]
     tipo = params["tipo"]
     estilo = params["estilo"]
-    if tipo in ("reels", "tiktok"):
+    if tipo in ("shorts", "reels", "tiktok"):
         return gerar_prompt_video(
             p, tipo, estilo,
             uso_inusitado=params.get("uso_inusitado"),
@@ -224,7 +224,7 @@ with st.sidebar:
     st.header("🌐 Vitrine Online")
     vitrine_url = (
         obter_segredo("VERCEL_VITRINE_URL")
-        or "https://fabrica-achadinhos.vercel.app"
+        or "https://fabrica-achadinhos-three.vercel.app"
     )
     st.markdown(f"[🔗 **Ver Vitrine no Ar**]({vitrine_url})")
 
@@ -753,9 +753,12 @@ if secao == "🚀 Pipeline":
 
             pacote_path = ultimo.get("pacote")
             if pacote_path and Path(pacote_path).exists():
+                conteudo_pacote = Path(pacote_path).read_text(encoding="utf-8")
+                with st.expander("👀 Ver Pacote de Post (Shorts, Reels, TikTok)", expanded=True):
+                    st.text_area("Conteúdo gerado:", value=conteudo_pacote, height=280)
                 st.download_button(
                     "📥 Baixar pacote de post (.txt)",
-                    data=Path(pacote_path).read_text(encoding="utf-8"),
+                    data=conteudo_pacote,
                     file_name=Path(pacote_path).name,
                     mime="text/plain",
                     use_container_width=True,
@@ -764,8 +767,8 @@ if secao == "🚀 Pipeline":
         with st.expander("ℹ️ O que o pipeline faz"):
             st.markdown("""
             1. **Gancho** — 3 opções via Gemini (ou o da planilha)
-            2. **Roteiro** — JSON 20s adaptado ao estilo e aos clipes reais
-            3. **Pacote** — `pacote_post.txt` (legenda, hashtags, regras ManyChat)
+            2. **Roteiro** — JSON 20s com técnica de loop, texto na tela e títulos para Shorts
+            3. **Pacote** — `pacote_post.txt` completo (YouTube Shorts, Reels, TikTok, regras e vitrine)
 
             O vídeo em si é feito no Google Vids com os prompts da seção 🤖 Gerar Prompt.
             """)
@@ -1011,7 +1014,7 @@ if secao == "🤖 Gerar Prompt":
         with col_tipo:
             tipo_criativo = st.radio(
                 "Tipo de criativo:",
-                ["🎬 Reels", "🎵 TikTok", "🎙️ Podcast (NotebookLM)", "📸 Carrossel"],
+                ["🔴 YouTube Shorts", "🎬 Reels", "🎵 TikTok", "🎙️ Podcast (NotebookLM)", "📸 Carrossel"],
                 key="tipo_criativo_radio",
             )
         with col_estilo:
@@ -1031,6 +1034,7 @@ if secao == "🤖 Gerar Prompt":
             st.caption(ESTILOS[estilo_sel]["descricao"])
 
         mapa_tipo = {
+            "🔴 YouTube Shorts": "shorts",
             "🎬 Reels": "reels",
             "🎵 TikTok": "tiktok",
             "🎙️ Podcast (NotebookLM)": "podcast",

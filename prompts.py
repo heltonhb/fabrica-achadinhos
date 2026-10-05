@@ -82,7 +82,7 @@ def validar_prompt_video(texto: str) -> tuple[bool, list[str]]:
     faltando = [r for r in _VIDEO_PROMPT_REQUISITOS if r not in t]
     # presença de CTA é difícil de checar por regex genérico, mas uma heurística
     # básica ajuda: palavras de chamada à ação costumam estar presentes.
-    cta_forte = any(p in t for p in ("cta", "call to action", "comenta", "comentar", "quero"))
+    cta_forte = any(p in t for p in ("cta", "call to action", "comenta", "comentar", "quero", "link", "perfil", "bio", "channel", "vitrine"))
     avisos: list[str] = []
     if not cta_forte:
         avisos.append("possível CTA ausente no prompt de vídeo")
@@ -202,7 +202,24 @@ def gerar_prompt_video(
     nicho = produto.nicho or "general"
     preco = produto.preco or "XX.XX"
     gancho = produto.gancho or f"Check out this find: {produto.nome}"
-    plataforma_nome = "Instagram Reels" if plataforma == "reels" else "TikTok"
+    plat_lower = plataforma.lower()
+    if "short" in plat_lower:
+        plataforma_nome = "YouTube Shorts"
+    elif "tiktok" in plat_lower:
+        plataforma_nome = "TikTok"
+    else:
+        plataforma_nome = "Instagram Reels"
+
+    num_clean = produto.id.replace("#", "")
+    if "short" in plat_lower:
+        bloco_cta = (
+            f'- CTA in the last 3 seconds: "O link com desconto tá no perfil do canal, é o achadinho #{num_clean}!" '
+            f'+ on-screen text badge "🔗 Link no perfil do canal | Código #{num_clean}" with a bright yellow arrow '
+            f'pointing towards the channel profile/avatar.\n'
+            f'- SEAMLESS LOOP: end the dialogue so it links smoothly back to the opening hook without saying goodbye.'
+        )
+    else:
+        bloco_cta = '- CTA in the last 3 seconds: "Comenta QUERO que eu te mando o link!" + yellow arrow to bio'
 
     estilo_info = ESTILOS.get(estilo, ESTILOS["chocante"])
     estilo_label = estilo_info["label"]
@@ -271,7 +288,7 @@ However, ALL spoken dialogue, on-screen text, and visible text elements must be 
 Part 2 must contain:
 - TRANSITION at the start (consistent with the style)
 - CREATIVE/UNUSUAL USE of the product (12-17s) — the "wow" moment
-- CTA in the last 3 seconds: "Comenta QUERO que eu te mando o link!" + yellow arrow to bio
+{bloco_cta}
 - Faster rhythm than Part 1
 
 The prompt must be SELF-CONTAINED.
@@ -404,6 +421,10 @@ def gerar_todos_prompts(
     estrategia_parte2: str = "plot_twist",
 ) -> list[PromptCriativo]:
     prompts: list[PromptCriativo] = []
+    prompts.extend(gerar_prompt_video(
+        produto, "shorts", estilo,
+        uso_inusitado=uso_inusitado, estrategia_parte2=estrategia_parte2,
+    ))
     prompts.extend(gerar_prompt_video(
         produto, "reels", estilo,
         uso_inusitado=uso_inusitado, estrategia_parte2=estrategia_parte2,

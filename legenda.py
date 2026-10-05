@@ -72,7 +72,17 @@ def gerar_legenda_template(produto: Produto, estilo: str = "reels") -> LegendaIn
     
     hashtags_base = f"#achadinhos #achadosdashopee #shopeebrasil #comprinhas {nicho_tag} #dicas #comprasonline"
 
-    if estilo == "carrossel":
+    if estilo == "shorts":
+        num_clean = pid.replace("#", "")
+        texto = (
+            f"{gancho}\n\n"
+            f"Achadinho indispensável da Shopee por apenas R$ {preco}! {nome} com custo-benefício surreal.\n\n"
+            f"🛒 Link oficial com desconto no perfil do canal! É o produto #{num_clean} na nossa vitrine."
+        )
+        comentario = f"🛒 O link oficial desse achadinho tá fixado no perfil do canal! É o produto #{num_clean} na vitrine."
+        hashtags = f"#Shorts #achadinhos #shopeebrasil #achadosdashopee #comprinhas {nicho_tag}"
+
+    elif estilo == "carrossel":
         texto = (
             f"Passa pro lado pra ver todos os detalhes desse achadinho que viralizou! ✨\n\n"
             f"📌 {nome} — por apenas R$ {preco}\n\n"
@@ -128,6 +138,7 @@ def gerar_legenda_template(produto: Produto, estilo: str = "reels") -> LegendaIn
 def _gerar_legenda_gemini(produto: Produto, estilo: str) -> LegendaInstagram:
     """Gera legenda via Gemini com fallback automático para template."""
     estilo_desc = {
+        "shorts": "YouTube Shorts — gancho rápido, link no perfil do canal e código na vitrine, hashtags com #Shorts",
         "reels": "Reels/TikTok — curta, direta, com CTA de comentar QUERO",
         "carrossel": "Carrossel — mais detalhada, com checklist e engajamento",
         "feed": "Post no Feed — equilibrada, profissional mas informal",
@@ -187,7 +198,7 @@ def gerar_todas_legendas(produto: Produto) -> dict[str, LegendaInstagram]:
     """Gera legendas para todos os estilos."""
     return {
         estilo: gerar_legenda(produto, estilo)
-        for estilo in ["reels", "carrossel", "feed", "stories"]
+        for estilo in ["shorts", "reels", "carrossel", "feed", "stories"]
     }
 
 
