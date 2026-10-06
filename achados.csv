@@ -372,4 +372,67 @@ Create a vertical 9:16 (1080x1920) video for Part 2 (from 10 to 20 seconds) of a
 
 ---
 *Note: The voiceover ends abruptly on ""número doze!"" to create a seamless loop back to the start of the video (""Não acredito que demorei tanto pra descobrir esse..."").*",,,,,,
-#13,Ideia,,Conjunto Feminino com Shorts Saia Estilo Vestido,Geral,"44,99",,https://s.shopee.com.br/3B7wgynFS6?share_channel_code=1,,,,Nao,,,,,,,
+#13,Roteiro Pronto,,Conjunto Feminino com Shorts Saia Estilo Vestido,Geral,"44,99",,https://s.shopee.com.br/3B7wgynFS6?share_channel_code=1,,,"Todo mundo acha que é vestido, mas é muito melhor",Nao,"Create a high-energy, vertical 9:16 short-form video (1080x1920) for Part 1 (0:00 to 0:10) of a 20-second product showcase. 
+
+**Global Settings:**
+- Format: Vertical 9:16 (1080x1920)
+- Overlay: Persistent rounded badge at the top center of the screen with bold text: ""ACHADINHO""
+- Audio: Dynamic, dramatic reveal music track playing softly in the background, mixed well below the voiceover.
+- Voiceover: Brazilian Portuguese voiceover with an energetic, shocked, revelation tone. Fast-paced delivery, informal, zero introductory greetings.
+
+---
+
+**Scene 1 (0:00 - 0:03) — Shocking Hook & Instant Cut**
+- **Visual:** Video starts instantly at 0:00 with zero dead air. A brief 0.5-second flash of a woman holding down a dress against sudden wind looking stressed, followed by an abrupt, punchy cut to a stylish woman standing confidently in a trendy matching two-piece set that perfectly mimics an elegant summer dress. She looks directly into the camera with an expression of pure disbelief.
+- **On-Screen Text (Top Center, below badge):** ""NÃO É O QUE PARECE! 😱""
+- **Voiceover (Brazilian Portuguese, starts immediately at 0:00):** ""Todo mundo acha que é vestido, mas é muito melhor!""
+
+**Scene 2 (0:03 - 0:07) — The Built-in Solution in Real Use**
+- **Visual:** Medium close-up. With a quick, playful motion, the model lifts the side of the skirt to reveal integrated, zero-transparency biker shorts underneath that prevent chafing. She does a quick jump and kick to show total freedom of movement and security.
+- **On-Screen Text:** ""SHORTS POR BAIXO!""
+- **Voiceover (Brazilian Portuguese):** ""Olha isso: por baixo tem um shorts embutido...""
+
+**Scene 3 (0:07 - 0:10) — The Unexpected Feature & Cliffhanger Hook**
+- **Visual:** Close-up on the side of the inner shorts. The model slides a large smartphone smoothly into a hidden deep pocket on the leg, showing that the outer skirt falls completely flat without bulging. She snaps her fingers toward the lens, leaning in with wide eyes as if about to drop an unbelievable secret.
+- **On-Screen Text:** ""COM BOLSO SECRETO!""
+- **Voiceover (Brazilian Portuguese):** ""...com bolso secreto que não marca nada, e o valor...""
+
+---
+
+**AI VIDEO GENERATOR PROMPT (Part 2: 10.0s – 20.0s)**
+
+**Format:** Vertical 9:16 (1080×1920)  
+**Style:** High-energy, fast-paced reveal (""Chocante""), dynamic cuts, vivid lighting.  
+**Audio Track:** Fast-paced, punchy, modern upbeat instrumental; kept low in mix to prioritize clear voiceover.  
+**Fixed UI Element:** Semi-transparent badge labeled ""ACHADINHO"" fixed at the top center throughout the entire video.  
+**Voiceover Specifications:** Brazilian Portuguese, enthusiastic and informal delivery, crisp pronunciation, no emoji styling, zero dead air. Total word count strictly under 30 words.
+
+---
+
+### **SCENE-BY-SCENE BREAKDOWN (10.0s – 20.0s)**
+
+#### **Scene 1: The Plot Twist (Unusual Utility Test)**
+* **Timing:** 10.0s – 13.5s
+* **Transition:** Whip-pan transition matching the energetic momentum of Part 1.
+* **Visual:** Fast cut to an outdoor sidewalk. A young Brazilian woman wearing the outfit casually hops onto a bicycle and pedals vigorously, then immediately dismounts and does a playful high kick. She lifts the skirt flap slightly to reveal the integrated, tight-fitting inner shorts, proving complete security and zero wardrobe malfunction risk in high-wind conditions.
+* **Voiceover (PT-BR):** ""Dá pra pedalar e correr no vento sem medo nenhum!""
+
+#### **Scene 2: Shock Value & Dramatic Price Reveal**
+* **Timing:** 13.5s – 17.0s
+* **Visual:** Snap zoom to a close-up of the premium ribbed fabric stretch, followed by an immediate cut to the full silhouette spinning gracefully. A sudden micro-pause in motion highlights a bold graphical price tag bouncing onto the center screen: **""R$ 44,99""**.
+* **Voiceover (PT-BR):** ""E o choque: custa só quarenta e quatro e noventa e nove!""
+
+#### **Scene 3: CTA & Seamless Audio/Visual Loop**
+* **Timing:** 17.0s – 20.0s
+* **Visual:** 
+  * At 17.0s: An on-screen sticker appears prominently: **""🔗 Link no perfil do canal | Código #13""** accompanied by a bright animated neon arrow pointing directly toward the bottom/side channel profile avatar.
+  * At 19.5s – 20.0s (Final 0.5s): Quick snap-cut returning to the exact medium shot, lighting, and pose from the very beginning of Part 1 (standing straight, hands relaxed at waist level, facing forward).
+* **Voiceover (PT-BR):** ""O link tá no perfil com o código treze, e é surreal que...""
+
+---
+
+### **AUDIO EDITING & LOOP EXECUTION INSTRUCTIONS**
+* **Hard Cut:** Terminate the audio instantly at 20.00s mid-phrase right on the word **""...que...""** with **ZERO trailing silence, zero reverb decay, and zero fade-out**.
+* **Loop Continuity Note:** When looped automatically on Shorts, the final connector sentence connects seamlessly with Part 1:
+  > *""O link tá no perfil com o código treze, e é surreal que... [LOOP] ...Todo mundo acha que é vestido, mas é muito melhor!""*
+  This forms a grammatically fluid, infinite sentence that tricks the viewer into rewatching.",,,,,,
