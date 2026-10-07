@@ -491,3 +491,57 @@ Create a vertical 9:16 (1080x1920) video for Part 2 (from 10 to 20 seconds) of a
 - **Visual Loop Note:** In the final 0.5 seconds (at 19.5s), the visual instantly snaps back to the exact starting frame, lighting, and pose of Part 1 to create an infinite loop.
 - **Voiceover (Brazilian Portuguese):** O link com desconto tá no perfil do canal, e é exatamente por...
 - **Seamless Continuity Note:** The spoken ending ""...e é exatamente por..."" flows instantly and grammatically directly into Part 1's hook: ""...[e é exatamente por] Cansada de roupa que aperta e não valoriza o corpo?"", forming one unbroken continuous sentence.",,,,,,
+#15,Roteiro Pronto,,Calça Feminina Cintura Alta Wide Leg Pantalona Bolso Couro Premium Preta Fake,Moda Feminina,"89,90",,https://s.shopee.com.br/4LJu5RRrNz?share_channel_code=1,,,Eu achava que calça wide leg de couro não combinava com nada.,Nao,"**VIDEO GENERATOR PROMPT (9:16 Vertical, 1080x1920)**
+
+**GLOBAL SETTINGS:**
+- Format: Vertical 9:16, 1080x1920 resolution.
+- Audio: Light, calming background acoustic guitar instrumental, low volume. Voiceover in Brazilian Portuguese, warm, informal, friendly tone, no emojis, no greetings.
+- Visual Element: A permanent ""ACHADINHO"" badge fixed at the top center of the screen throughout the video.
+
+---
+
+**SCENE 1 (0:00 - 0:03) — THE SEAMLESS LOOP HOOK**
+- **Visual:** Starts immediately at 0:00 with no delay. A stylish young Brazilian woman is standing in a well-lit minimalist bedroom, holding up a sleek black high-waisted wide-leg faux leather pants toward the camera. Camera is static, medium shot.
+- **On-Screen Text:** ""Calça Wide Leg Couro R$ 89,90""
+- **Voiceover (Brazilian Portuguese):** Eu achava que calça wide leg de couro não combinava com nada, até entender o segredo dela.
+
+**SCENE 2 (0:03 - 0:07) — PRODUCT IN REAL USE**
+- **Visual:** Cut to a close-up shot of the woman wearing the black wide-leg leather pants paired with a simple white t-shirt and sneakers. She tucks the shirt in to highlight the high waist, showing how the premium fabric drapes effortlessly and flatters the silhouette.
+- **Voiceover (Brazilian Portuguese):** O segredo é o corte alfaiataria com cintura alta. Ele alonga a silhueta e deixa qualquer look básico super elegante sem esforço.
+
+**SCENE 3 (0:07 - 0:10) — UNEXPECTED FEATURE & ENDING SETUP**
+- **Visual:** Close-up on the side pocket of the pants as she slips her hand into it, demonstrating the deep, functional pockets. She then pulls the fabric slightly to show the soft, comfortable inner lining that doesn't stick to the skin.
+- **Voiceover (Brazilian Portuguese):** E o melhor é que o forro interno é macio e tem bolsos de verdade. Olha esse caimento...
+
+---
+
+```text
+AI Video Generator Prompt
+
+Format: Vertical 9:16, 1080x1920.
+Style: Educational, helpful friend tone, calm and clear language, faster rhythm than Part 1.
+Audio Elements: Light background music at low volume, Brazilian Portuguese voiceover.
+Overlay Element: A permanent ""ACHADINHO"" badge positioned at the top center of the screen throughout the video.
+
+---
+
+[00:10 - 00:14] Scene 1: Transition & Creative Use (The Plot Twist)
+- Visual: Fast-paced cut. A stylish woman in a casual office setting wears the black faux leather wide-leg pants paired not with boots or heels, but with crisp white sneakers and a tucked-in oversized denim jacket, showing an unexpected, high-low styling trick.
+- On-screen Text (Brazilian Portuguese): Truque de styling: misture alfaiataria de couro com tênis casual.
+- Voiceover (Brazilian Portuguese, informal, max 30 words): Olha esse truque: misturar o couro pesado com tênis branco cria o equilíbrio perfeito entre o chique e o despojado.
+
+[00:14 - 00:17] Scene 2: Product Quality Reinforcement
+- Visual: Close-up shot of the high waistline and pocket details, emphasizing the premium texture of the black fake leather and the impeccable tailoring.
+- On-screen Text (Brazilian Portuguese): Cintura alta que valoriza e acabamento impecável.
+- Voiceover (Brazilian Portuguese, informal, max 30 words): A cintura alta alonga a silhueta e o acabamento em couro premium não marca nada.
+
+[00:17 - 00:20] Scene 3: CTA & Seamless Loop Setup
+- Visual: The camera pulls back slightly as the woman smiles and points toward the top of the screen. An on-screen badge/sticker appears: ""🔗 Link no perfil do canal | Código #15"" accompanied by a bright animated arrow pointing directly to the profile avatar. In the final 0.5 seconds, the frame snaps back to the exact initial framing of Part 1 to prepare for the loop.
+- On-screen Text (Brazilian Portuguese): Link no perfil | Código #15
+- Voiceover (Brazilian Portuguese, informal, max 30 words, ending mid-sentence abruptly): O link oficial tá no canal com o cupom ativo, e eu garanto que... [Cut voiceover abruptly with zero trailing silence or fade-out].
+
+---
+
+SEAMLESS LOOP INSTRUCTION:
+The final spoken phrase (""...e eu garanto que..."") must cut off mid-sentence without any pause or period. It flows directly and continuously into the opening hook of Part 1 (""Eu achava que calça wide leg de couro não combinava com nada.""), forming one unbroken sentence: ""O link oficial tá no canal com o cupom ativo, e eu garanto que... Eu achava que calça wide leg de couro não combinava com nada.""
+```",,,,,,
