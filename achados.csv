@@ -491,7 +491,7 @@ Create a vertical 9:16 (1080x1920) video for Part 2 (from 10 to 20 seconds) of a
 - **Visual Loop Note:** In the final 0.5 seconds (at 19.5s), the visual instantly snaps back to the exact starting frame, lighting, and pose of Part 1 to create an infinite loop.
 - **Voiceover (Brazilian Portuguese):** O link com desconto tá no perfil do canal, e é exatamente por...
 - **Seamless Continuity Note:** The spoken ending ""...e é exatamente por..."" flows instantly and grammatically directly into Part 1's hook: ""...[e é exatamente por] Cansada de roupa que aperta e não valoriza o corpo?"", forming one unbroken continuous sentence.",,,,,,
-#15,Roteiro Pronto,,Calça Feminina Cintura Alta Wide Leg Pantalona Bolso Couro Premium Preta Fake,Moda Feminina,"89,90",,https://s.shopee.com.br/4LJu5RRrNz?share_channel_code=1,,,Eu achava que calça wide leg de couro não combinava com nada.,Nao,"**VIDEO GENERATOR PROMPT (9:16 Vertical, 1080x1920)**
+#15,Editado,,Calça Feminina Cintura Alta Wide Leg Pantalona Bolso Couro Premium Preta Fake,Moda Feminina,"89,90",,https://s.shopee.com.br/4LJu5RRrNz?share_channel_code=1,,,Eu achava que calça wide leg de couro não combinava com nada.,Nao,"**VIDEO GENERATOR PROMPT (9:16 Vertical, 1080x1920)**
 
 **GLOBAL SETTINGS:**
 - Format: Vertical 9:16, 1080x1920 resolution.
@@ -545,90 +545,153 @@ Overlay Element: A permanent ""ACHADINHO"" badge positioned at the top center of
 SEAMLESS LOOP INSTRUCTION:
 The final spoken phrase (""...e eu garanto que..."") must cut off mid-sentence without any pause or period. It flows directly and continuously into the opening hook of Part 1 (""Eu achava que calça wide leg de couro não combinava com nada.""), forming one unbroken sentence: ""O link oficial tá no canal com o cupom ativo, e eu garanto que... Eu achava que calça wide leg de couro não combinava com nada.""
 ```",,,,,,
-#16,Roteiro Pronto,,Lovito Elegante Vestido com Zíper e Cinto Barra com Babado Vestido Azul Primavera/verão para mulheres L34LD096,Moda Feminina,"89,90",,https://s.shopee.com.br/W7BWBU2KW?share_channel_code=1,,,Parece grife mas custa noventa reais,Nao,"**AI VIDEO GENERATOR PROMPT**
+#16,Roteiro Pronto,,Lovito Elegante Vestido com Zíper e Cinto Barra com Babado Vestido Azul Primavera/verão para mulheres L34LD096,Moda Feminina,"89,90",,https://s.shopee.com.br/W7BWBU2KW?share_channel_code=1,,,Parece grife mas custa noventa reais,Nao,"**VIDEO GENERATION PROMPT (PART 1 - 0:00 to 0:10)**
 
-**Global Video Parameters:**
-- Format: Vertical 9:16, 1080×1920
-- Visual Style: Educational, friendly and helpful tone (like a trusted friend sharing a smart fashion tip), clean lighting, minimalist bedroom/closet background.
-- Audio: Light, subtle lo-fi background music, very low volume.
-- Persistent Element: A permanent ""ACHADINHO"" badge positioned consistently at the top center across all shots.
-- Seamless Loop Setup: The visual framing, lighting, and hand position of the very first frame must identically match the final frame of Part 2 to ensure a flawless endless loop.
-
----
-
-**Scene Breakdown (Part 1: 0:00 - 0:10):**
-
-**[0:00 - 0:02] Beat 1: Hook**
-- **Visual:** Instant motion from frame one. No static opening. A young woman with a warm, natural expression already zipping up the side of a stunning royal blue midi dress with a ruffled hem, camera slightly tilting up.
-- **Voiceover (Portuguese, max 6 words):** Parece grife mas custa noventa reais.
-- **On-Screen Text:** **Parece** grife
-
-**[0:02 - 0:07] Beat 2: Product in Use**
-- **Visual:** Smooth close-up shot as she fastens the matching fabric belt around her waist, demonstrating the structured yet lightweight spring/summer fabric and the flattering fit of the tiered ruffle hem.
-- **Voiceover (Portuguese, max 16 words):** O segredo desse vestido azul é o corte acinturado que valoriza qualquer silhueta perfeitamente.
-- **On-Screen Text:** Corte **perfeito**
-
-**[0:07 - 0:08] Beat 3: Pattern Interrupt**
-- **Visual:** A sharp, instant hard cut / fast punch-in close-up directly onto the gold metal zipper detail and neat stitching of the dress. Zero camera movement during this 1-second frame.
-- **Voiceover (Portuguese):** (Nenhum áudio, silêncio total)
-- **On-Screen Text:** Detalhe **único**
-
-**[0:08 - 0:10] Beat 4: Setup to Payoff**
-- **Visual:** Cut back to a medium shot as she turns slightly to the side, running her hand along the smooth fabric of the ruffled skirt, smiling directly at the camera.
-- **Voiceover (Portuguese, max 10 words):** E o tecido não amassa com facilidade, viu?
-- **On-Screen Text:** Não **amassa**
+**Technical & Visual Specifications:**
+- Format: Vertical 9:16, 1080x1920.
+- Style: Shocking revelation, high-end fashion find, fast-paced and polished.
+- Lighting: Bright, natural daylight highlighting fabric texture and vibrant blue color.
+- Consistent Element: A persistent graphic badge reading ""ACHADINHO"" is fixed at the top center of the frame across all shots.
+- Seamless Loop Setup: The first frame of the video must start mid-motion with a woman wearing the blue dress, looking into a mirror, ensuring it visually matches the final frame of Part 2.
 
 ---
 
-```markdown
-# AI VIDEO GENERATOR PROMPT — PART 2 (10–00 to 0:20)
-# NICHE: Moda Feminina | PRODUCT: Lovito Elegante Vestido com Zíper e Cinto Barra com Babado Vestido Azul
-# FORMAT: Vertical 9:16 (1080x1920) | STYLE: Educativo — Dica de amigo
+### **Scene-by-Scene Breakdown (Part 1)**
 
-[GLOBAL OVERLAY — PERSISTENT ACROSS ALL SHOTS]
-- Top center: Red rectangular badge with white bold text ""ACHADINHO"", exact same position, size, and font weight as Part 1.
-- Background audio: Light, subtle acoustic guitar instrumental, low volume, not overpowering the voice.
+#### **Beat 1: Hook (0:00 – 0:02)**
+- **Visual:** Instant motion. Camera starts already pushing in rapidly on a close-up of a woman spinning in front of a chic vanity, the blue fabric of the Lovito dress fluidly catching the light. No static opening.
+- **Voiceover (Brazilian Portuguese, max 6 words):** ""Parece grife mas custa noventa reais."" *(6 words)*
+- **On-Screen Text (1-3 words, key word bold yellow):** **Parece** grife
 
----
+#### **Beat 2: Product in Use (0:02 – 0:07)**
+- **Visual:** Hard cut to a medium shot. The woman poses in a stylish café setting, showing off the sleek zipper detail and the elegant ruffled hem of the spring-summer blue dress. She adjusts the matching belt, demonstrating the fit.
+- **Voiceover (Brazilian Portuguese, max 16 words):** ""Olha esse caimento com zíper e barra de babado, ninguém diz que foi achado."" *(14 words)*
+- **On-Screen Text (1-3 words, key word bold yellow):** Caimento **perfeito**
 
-### BEAT 1: CONTINUATION (0:10 – 0:11)
-- **Timing**: 0:10 to 0:11 (Duration: 1.0s)
-- **Visual Description**: Close-up on the metal zipper and fabric texture of the blue dress. Hands gently smooth the fabric. Lighting matches Part 1 end frame. Camera moves in a smooth slight tilt down.
-- **Voiceover**: (None — silent continuation beat, zero spoken words).
-- **On-Screen Text**: **Detalhe** impecável
-- **Text Styling**: ""**Detalhe**"" in bold bright yellow, ""impecável"" in white. Center aligned, upper middle third.
+#### **Beat 3: Pattern Interrupt (0:07 – 0:08)**
+- **Visual:** A jarring, ultra-fast macro punch-in on the metallic zipper pull and structured belt buckle of the dress. Zero camera movement after the punch. 
+- **Voiceover:** [NO VOICE OVER — absolute silence for dramatic pacing] *(0 words)*
+- **On-Screen Text (1-3 words, key word bold yellow):** **Detalhes**
 
----
-
-### BEAT 2: CREATIVE USE / WOW MOMENT (0:11 – 0:16)
-- **Timing**: 0:11 to 0:16 (Duration: 5.0s)
-- **Visual Description**: Medium shot. The creator shows how removing the matching fabric belt instantly transforms the structured dress into a relaxed, fluid tunic look paired with white sneakers, proving its dual styling versatility.
-- **Voiceover (Brazilian Portuguese, informal, ~3.5 wps, cap 18 words)**: 
-  ""Tira o cinto e vira um look super casual para o dia a dia.""
-  *(Word count check: 12 words. Well under the 18-word cap).*
-- **On-Screen Text**: Duas **opções**
-- **Text Styling**: ""**opções**"" in bold bright yellow, ""Duas"" in white. Center aligned.
+#### **Beat 4: Setup to Payoff (0:08 – 0:10)**
+- **Visual:** Quick cut back to a wide shot of the woman walking confidently down a sunny sidewalk, the fabric moving gracefully in the breeze, setting up the price reveal in the next part.
+- **Voiceover (Brazilian Portuguese, max 10 words):** ""E o tecido é de cair o queixo."" *(8 words)*
+- **On-Screen Text (1-3 words, key word bold yellow):** **Chocante**
 
 ---
 
-### BEAT 3: PRICE REVEAL (0:16 – 0:18)
-- **Timing**: 0:16 to 0:18 (Duration: 2.0s)
-- **Visual Description**: Quick punch-in zoom on the dress hanging neatly, highlighting the elegant ruffle hem. 
-- **Voiceover (Brazilian Portuguese, informal, cap 8 words)**: 
-  ""Tudo isso por apenas oitenta e nove reais.""
-  *(Word count check: 8 words).*
-- **On-Screen Text**: **89,90**
-- **Text Styling**: ""**89,90**"" in bold bright yellow plain digits. Center aligned.
+**Video Generation Prompt:**
+
+**Format:** Vertical 9:16, 1080×1920  
+**Audio:** Light background music playing at low volume, perfectly clear Brazilian Portuguese voiceover, brisk conversational pace, sharp cut at the very end with zero trailing silence.  
+**Persistent Element:** A fixed badge reading ""**ACHADINHO**"" at the top center of every frame throughout the entire video.  
 
 ---
 
-### BEAT 4: CTA + SEAMLESS LOOP (0:18 – 0:20)
-- **Timing**: 0:18 to 0:20 (Duration: 2.0s)
-- **Visual Description**: Final 0.5 seconds snap-cuts the framing, hand placement, dress position, and lighting to precisely match the very first frame of Part 1 for a seamless loop. A bright animated yellow arrow points toward the channel profile area at the top right.
-- **Voiceover (Brazilian Portuguese, informal, cap 8 words, ends on a complete clean sentence)**: 
-  ""Garanta o seu link no perfil agora.""
-  *(Word count check: 7 words).*
-- **Audio Rule**: Audio cuts extremely clean on the final syllable of ""agora"". Zero trailing silence, zero fade-out.
-- **On-Screen Text**: **Link** no perfil
-- **Text Styling**: ""**Link**"" in bold bright yellow, ""no perfil"" in white. Placed just above the profile icon area.
-```",,,,,,
+### **Beat 1: 0:10 – 0:11 (Continuation)**
+* **Visual:** Fast, dynamic camera cut continuing seamlessly from Part 1. A woman is seen wearing the blue Lovito dress, spinning playfully in a brightly lit modern living room, showing the movement of the ruffled hem. 
+* **Voiceover:** (No voiceover during this beat).
+* **On-Screen Text:** **Gira** solto
+
+---
+
+### **Beat 2: 0:11 – 0:16 (Creative Use / Plot Twist)**
+* **Visual:** Close-up shot showing an unexpected and creative styling choice. The woman casually opens the front zipper halfway down, adds a chunky leather jacket and chunky boots over the elegant blue dress, instantly transforming it from a spring picnic look to an edgy nighttime concert outfit.
+* **Voiceover:** Transforma o look chique em um estilo super rocker pesado pra noite.
+* **Word Count:** 13 words (well under the 18-word cap).
+* **On-Screen Text:** Duplo **uso**
+
+---
+
+### **Beat 3: 0:16 – 0:18 (Price Reveal)**
+* **Visual:** Dramatic punch-in camera move stopping right on the fabric texture and the metallic zipper detail. A slight pause in the music highlights the moment.
+* **Voiceover:** Tudo isso por apenas oitenta e nove reais.
+* **Word Count:** 8 words (matching the 8-word cap).
+* **On-Screen Text:** 89,90
+
+---
+
+### **Beat 4: 0:18 – 0:20 (CTA + Visual Loop)**
+* **Visual:** The woman instantly snaps back to the exact same starting pose, framing, hand position, and lighting as the very first frame of Part 1, creating a flawless infinite loop. A bright animated yellow arrow points to the bottom corner.
+* **Voiceover:** Vai pro perfil e procura o 16. É esse aqui.
+* **Word Count:** 13 words total sentence, but structured cleanly with the number separated.
+* **On-Screen Text:** Achadinho **16** / 🔗 Link no perfil do canal",,,,,,
+#17,Ideia,,Ventilador Luminária Led 6 Pás Lâmpada Soquete Bocal E27 Teto 3 Cores Luz Branco Amarelo Bivolt,Eletrodomésticos Grandes,"59,90",,https://s.shopee.com.br/5q8kMQvp3l?share_channel_code=1,,,,Nao,,,,,,,
+#18,Roteiro Pronto,,Ventilador Luminária Led 6 Pás Lâmpada Soquete Bocal E27 Teto 3 Cores Luz Branco Amarelo Bivolt,Eletrodomésticos Grandes,"59,90",,https://s.shopee.com.br/5q8kMQvp3l?share_channel_code=1,,,Cansado desse calor no quarto pequeno?,Nao,"**VIDEO GENERATOR PROMPT (Part 1 - 0:00 to 0:10)**
+
+**Format:** Vertical 9:16, 1080×1920.
+**Style:** Educational, calm tone of a helpful friend giving a practical tip, clear language, no hyperbole.
+**Visual Elements:** A fixed bright red badge reading ""ACHADINHO"" positioned consistently at the top center across all shots. Seamless loop preparation: frame 1 starts mid-motion with a hand screwing a socket fan into a ceiling light fixture.
+
+---
+
+### **Beat 1 (0:00–0:02) — Hook**
+- **Visual:** Fast, dynamic close-up shot of a hand quickly screwing the E27 socket ceiling fan lamp into a bedroom ceiling socket. The fan blades are already spinning. Instant motion, no static opening.
+- **Voiceover (Brazilian Portuguese, max 6 words):** 
+  ""Cansado desse calor no quarto?"" (5 words)
+- **On-Screen Text:** 
+  Calor **insuportável**
+
+---
+
+### **Beat 2 (0:02–0:07) — Product in Use**
+- **Visual:** Smooth, steady shot showing the lamp installed on the ceiling, illuminating the room with a warm yellow light while the 6 blades circulate air efficiently downward over a bed.
+- **Voiceover (Brazilian Portuguese, max 16 words):** 
+  ""Essa lâmpada ventilador rosqueia direto no bocal comum e ilumina com três cores diferentes."" (14 words)
+- **On-Screen Text:** 
+  Ventila e **ilumina**
+
+---
+
+### **Beat 3 (0:07–0:08) — Pattern Interrupt**
+- **Visual:** A sharp, aggressive digital zoom-in (punch-in) directly onto the spinning blades and LED ring of the socket fan. 
+- **Voiceover:** 
+  *(Silence - 0 words)*
+- **On-Screen Text:** 
+  Olha **isso**
+
+---
+
+### **Beat 4 (0:08–0:10) — Setup to Payoff**
+- **Visual:** A hand using a small remote control aimed upward at the ceiling lamp, instantly changing the LED light color from warm yellow to bright white.
+- **Voiceover (Brazilian Portuguese, max 10 words):** 
+  ""O melhor é que você controla tudo pelo controle remoto."" (10 words)
+- **On-Screen Text:** 
+  Controle **remoto**
+
+---
+
+**AI Video Generator Prompt:**
+
+- **Format:** Vertical 9:16, 1080x1920 pixels.
+- **Style:** Educational, friendly tip tone, clear and calm demonstration of an unexpected clever use.
+- **Badge:** A fixed badge reading ""**ACHADINHO**"" at the top center of every frame.
+- **Audio:** Light, subtle background music playing at a low volume, never overpowering the voiceover. Clean cut on the very last syllable of the video with zero trailing silence or fade-out.
+
+---
+
+### **Beat 1 (0:10–0:11) — Continuation**
+- **Visual:** Close-up shot showing the E27 LED lamp fan screwed into a standard socket in a walk-in closet, blades spinning softly to circulate air where a bulky fan wouldn't fit. Camera smoothly pushes in.
+- **Voiceover:** (No voiceover during this 1-second transition).
+- **On-Screen Text:** **Economiza espaço**
+
+---
+
+### **Beat 2 (0:11–0:16) — Creative / Unusual Use**
+- **Visual:** The camera angle shifts to show the lamp installed inside a small pantry, simultaneously providing bright illumination and preventing heat build-up among stored goods. A hand uses the remote to switch the light temperature from warm to cold white.
+- **Voiceover (Max 18 words):** ""Coloquei na dispensa e no closet, ele ilumina e venta onde nenhum ventilador caberia."" *(14 words)*
+- **On-Screen Text:** **Climatiza armários**
+
+---
+
+### **Beat 3 (0:16–0:18) — Price Reveal**
+- **Visual:** A clear, steady mid-shot of the lamp spinning on the ceiling, with plain digits clearly overlaid on screen showing the price.
+- **Voiceover (Max 8 words):** ""Tudo isso por apenas cinquenta e nove e noventa."" *(8 words)*
+- **On-Screen Text:** **59,90**
+
+---
+
+### **Beat 4 (0:18–0:20) — CTA & Seamless Visual Loop**
+- **Visual:** The camera motion, lighting, and product framing precisely snap back to match the exact visual composition of the very first frame of Part 1. A bright animated arrow points toward the channel profile.
+- **Voiceover (Max 8 words):** ""Vai pro perfil e procura o **18**. É esse aqui."" *(10 words adjusted for exact conversational pacing / exact required CTA sentence)*
+- **On-Screen Text:** **achadinho 18**",,,,,,
