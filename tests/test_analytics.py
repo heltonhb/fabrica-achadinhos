@@ -44,7 +44,9 @@ class TestResumirHits:
         assert r["visitas_inapp"] == 25
         # produtos ordenados por clique (decrescente)
         assert [p["id"] for p in r["produtos_clicados"]] == ["15", "20", "20"]
-        assert r["produtos_clicados"][0] == {"id": "15", "posicao": "grade", "cliques": 12}
+        assert r["produtos_clicados"][0] == {
+            "id": "15", "posicao": "grade", "cliques": 12, "na_lista": True
+        }
         assert r["buscas_falhas"][0] == {"termo": "aspirador", "buscas": 5}
         assert r["filtros"][0]["cliques"] == 7
 
@@ -53,6 +55,45 @@ class TestResumirHits:
         assert r["visitantes"] == 0
         assert r["cliques_cta"] == 0
         assert r["produtos_clicados"] == []
+
+    def test_pageview_com_path_cta_nao_conta_como_clique(self):
+        """Visita direta/bot em /cta/... (event=false) não é clique no CTA.
+
+        Regressão: o painel mostrava o produto #99 (que não existe na lista)
+        porque um pageview de crawler em /cta/grade/99 era contado como clique.
+        """
+        hits = [
+            {"path": "/", "count": 5, "count_raw": 5, "event": False},
+            {"path": "/cta/grade/99", "count": 1, "event": False},
+            {"path": "/cta/grade/20", "count": 3, "event": True},
+        ]
+
+        r = analytics.resumir_hits(hits)
+
+        assert r["cliques_cta"] == 3
+        assert r["produtos_clicados"] == [
+            {"id": "20", "posicao": "grade", "cliques": 3, "na_lista": True}
+        ]
+        assert all(p["id"] != "99" for p in r["produtos_clicados"])
+
+    def test_marca_clique_de_produto_removido_da_lista(self):
+        """Clique real em id que não existe mais na planilha é marcado como removido."""
+        hits = [
+            {"path": "/cta/grade/99", "count": 4, "event": True},
+            {"path": "/cta/grade/15", "count": 2, "event": True},
+        ]
+
+        # ids da planilha em formatos mistos ('#15', '02') continuam reconhecidos
+        r = analytics.resumir_hits(hits, ids_conhecidos=["#15", "02"])
+
+        assert r["produtos_clicados"][0] == {
+            "id": "99", "posicao": "grade", "cliques": 4, "na_lista": False
+        }
+        assert r["produtos_clicados"][1]["na_lista"] is True
+
+        # sem ids_conhecidos não há como validar → assume que está na lista
+        sem_ref = analytics.resumir_hits(hits)
+        assert all(p["na_lista"] for p in sem_ref["produtos_clicados"])
 
 
 class TestEstatisticasVitrine:
@@ -93,6 +134,22 @@ class TestEstatisticasVitrine:
         assert resumo["referrers"][0] == {"url": "instagram.com", "visitas": 22}
         # referrer vazio é descartado
         assert all(r["url"] for r in resumo["referrers"])
+
+    def test_cache_distingue_lista_de_ids(self, monkeypatch):
+        """Mudou a lista de produtos (ids_conhecidos) → não reaproveita cache antigo."""
+        chamadas = {"n": 0}
+
+        def _get(caminho, params):
+            chamadas["n"] += 1
+            return {"stats/total": {"total": 1}, "stats/hits": {"hits": []}, "stats/toprefs": {"stats": []}}[caminho]
+
+        monkeypatch.setattr(analytics, "_get", _get)
+        analytics.limpar_cache()
+
+        analytics.estatisticas_vitrine(dias=20)
+        analytics.estatisticas_vitrine(dias=20, ids_conhecidos=["#01"])
+
+        assert chamadas["n"] == 6  # 3 chamadas por lista de cache distinta
 
     def test_ctr_zero_quando_sem_visitas(self, monkeypatch):
         monkeypatch.setattr(

@@ -515,8 +515,13 @@ def api_vitrine_metricas(dias: int = 30):
     """Resumo de métricas da vitrine (GoatCounter): visitas, cliques por produto e buscas."""
     from analytics import ErroAnalytics, estatisticas_vitrine
 
+    # ids atuais da planilha → cliques em produtos já removidos são marcados
+    ids_na_lista = [p.id for p in carregar_ou_atualizar_produtos()] or None
     try:
-        return {"sucesso": True, "metricas": estatisticas_vitrine(dias=dias)}
+        return {
+            "sucesso": True,
+            "metricas": estatisticas_vitrine(dias=dias, ids_conhecidos=ids_na_lista),
+        }
     except ErroAnalytics as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:  # pragma: inesperado

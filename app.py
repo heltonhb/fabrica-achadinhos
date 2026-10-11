@@ -284,7 +284,9 @@ with st.sidebar:
             if st.button("🔄 Atualizar", use_container_width=True, key="btn_metricas_vitrine"):
                 analytics.limpar_cache()
         try:
-            met = analytics.estatisticas_vitrine(dias=dias_metricas)
+            # ids atuais da planilha → cliques em produtos já removidos ganham aviso
+            ids_na_lista = [p.id for p in st.session_state.produtos] or None
+            met = analytics.estatisticas_vitrine(dias=dias_metricas, ids_conhecidos=ids_na_lista)
         except analytics.ErroAnalytics as exc:
             st.warning(str(exc))
         else:
@@ -297,7 +299,11 @@ with st.sidebar:
             if met["produtos_clicados"]:
                 st.markdown("**🏆 Produtos mais clicados**")
                 st.table([
-                    {"Produto": f"#{p['id']}", "Posição": p["posicao"], "Cliques": p["cliques"]}
+                    {
+                        "Produto": f"#{p['id']}" + ("" if p.get("na_lista", True) else " ⚠️ removido"),
+                        "Posição": p["posicao"],
+                        "Cliques": p["cliques"],
+                    }
                     for p in met["produtos_clicados"][:10]
                 ])
             else:

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import re
 import time
 from typing import Any
 
@@ -113,8 +114,27 @@ def decompor_evento_cta(caminho: str) -> tuple[str, str] | None:
     return None
 
 
-def resumir_hits(hits: list[dict[str, Any]]) -> dict[str, Any]:
-    """Agrega a lista de paths do GoatCounter no resumo do painel."""
+def normalizar_id_produto(pid: str) -> str:
+    """Canonicaliza id de produto p/ comparação: '#01', '01' e '1' → '1'."""
+    numeros = re.sub(r"\D", "", str(pid or ""))
+    return str(int(numeros)) if numeros else ""
+
+
+def resumir_hits(
+    hits: list[dict[str, Any]],
+    ids_conhecidos: list[str] | None = None,
+) -> dict[str, Any]:
+    """Agrega a lista de paths do GoatCounter no resumo do painel.
+
+    Args:
+        hits: paths retornados por /stats/hits.
+        ids_conhecidos: ids da lista atual de produtos. Quando informado,
+            cliques em ids que não existem mais são marcados com
+            ``na_lista: False`` (produto removido da planilha).
+    """
+    ids_validos: set[str] | None = None
+    if ids_conhecidos is not None:
+        ids_validos = {normalizar_id_produto(i) for i in ids_conhecidos} - {""}
     resumo: dict[str, Any] = {
         "visualizacoes": 0,          # página da vitrine ("/")
         "visitantes": 0,
@@ -142,10 +162,16 @@ def resumir_hits(hits: list[dict[str, Any]]) -> dict[str, Any]:
 
         cta = decompor_evento_cta(caminho)
         if cta:
-            posicao, pid = cta
-            resumo["cliques_cta"] += contagem
-            chave = (pid, posicao)
-            produtos[chave] = produtos.get(chave, 0) + contagem
+            # Só evento real (event=true) é clique no botão da Shopee.
+            # Pageviews com path /cta/... (bot, crawler ou visita direta à URL)
+            # não contam — senão aparece "produto" fantasma no painel.
+            if hit.get("event"):
+                posicao, pid = cta
+                resumo["cliques_cta"] += contagem
+                chave = (pid, posicao)
+                produtos[chave] = produtos.get(chave, 0) + contagem
+            else:
+                logger.info("CTA ignorado (pageview, não clique): %s", caminho)
             continue
 
         if caminho.startswith("/busca/sem-resultado/"):
@@ -167,7 +193,13 @@ def resumir_hits(hits: list[dict[str, Any]]) -> dict[str, Any]:
             resumo["visitas_inapp"] += contagem
 
     resumo["produtos_clicados"] = [
-        {"id": pid, "posicao": posicao, "cliques": cliques}
+        {
+            "id": pid,
+            "posicao": posicao,
+            "cliques": cliques,
+            # sem ids_conhecidos não há como validar → assume na lista
+            "na_lista": ids_validos is None or normalizar_id_produto(pid) in ids_validos,
+        }
         for (pid, posicao), cliques in sorted(produtos.items(), key=lambda kv: -kv[1])
     ]
     resumo["buscas_falhas"] = [
@@ -183,13 +215,26 @@ def resumir_hits(hits: list[dict[str, Any]]) -> dict[str, Any]:
 
 # ─── API pública ──────────────────────────────────────────────────────────────
 
-def estatisticas_vitrine(dias: int = 30, limite: int = 200, usar_cache: bool = True) -> dict[str, Any]:
+def estatisticas_vitrine(
+    dias: int = 30,
+    limite: int = 200,
+    usar_cache: bool = True,
+    ids_conhecidos: list[str] | None = None,
+) -> dict[str, Any]:
     """Resumo de métricas da vitrine para exibição no app.
+
+    ``ids_conhecidos`` (ids da lista atual de produtos) permite marcar cliques
+    em produtos que já saíram da planilha com ``na_lista: False``.
 
     Levanta ErroAnalytics quando o token está ausente/inválido ou sem rede.
     """
     dias = max(1, int(dias))
-    chave_cache = (dias, limite)
+    ids_norm = (
+        frozenset(normalizar_id_produto(i) for i in ids_conhecidos) - {""}
+        if ids_conhecidos is not None
+        else None
+    )
+    chave_cache = (dias, limite, ids_norm)
     import time
 
     if usar_cache:
@@ -210,7 +255,7 @@ def estatisticas_vitrine(dias: int = 30, limite: int = 200, usar_cache: bool = T
     )
     dados_refs = _get("stats/toprefs", {"start": inicio, "end": fim, "limit": 10})
 
-    resumo = resumir_hits(dados_hits.get("hits") or [])
+    resumo = resumir_hits(dados_hits.get("hits") or [], ids_conhecidos=ids_conhecidos)
     resumo["visitas_total_periodo"] = int(dados_total.get("total") or 0)
     resumo["eventos_total_periodo"] = int(dados_total.get("total_events") or 0)
     resumo["referrers"] = [
