@@ -57,6 +57,7 @@ def processar_produto(
     forcar: bool = False,
     estilo: str = "chocante",
     usar_ganchos: bool = True,
+    loop_infinito: bool = True,
 ) -> dict:
     """Roda o pipeline completo para UM produto.
 
@@ -66,6 +67,7 @@ def processar_produto(
         estilo: Persona do vídeo (chave de ``prompts.ESTILOS``).
         usar_ganchos: Se True, gera 3 ganchos via Gemini e escolhe o melhor
                       antes de gerar o roteiro. Se False, usa ``p.gancho`` do CSV.
+        loop_infinito: Se True, gera roteiro com técnica de seamless loop.
 
     Returns:
         Dict com: ok, log, pacote.
@@ -132,22 +134,22 @@ def processar_produto(
                 p.id, estilo_salvo, estilo,
             )
     else:
-        logger.info("Gerando roteiro para %s (estilo: %s)...", p.id, estilo)
-        roteiro = gerar_roteiro(p_roteiro, estilo=estilo)
+        logger.info("Gerando roteiro para %s (estilo: %s, loop: %s)...", p.id, estilo, loop_infinito)
+        roteiro = gerar_roteiro(p_roteiro, estilo=estilo, loop_infinito=loop_infinito)
         if not roteiro:
             raise RuntimeError(f"Gemini não gerou roteiro para {p.id}")
         # estilo já vem em _meta via gerar_roteiro; garante merge seguro
-        roteiro["_meta"] = {**roteiro.get("_meta", {}), "estilo": estilo}
+        roteiro["_meta"] = {**roteiro.get("_meta", {}), "estilo": estilo, "loop_infinito": loop_infinito}
         arq_roteiro.write_text(
             json.dumps(roteiro, ensure_ascii=False, indent=1), encoding="utf-8"
         )
-        log.append(f"roteiro: gerado (estilo: {estilo}, clipes: {roteiro['_meta'].get('n_clipes', 0)})")
+        log.append(f"roteiro: gerado (estilo: {estilo}, clipes: {roteiro['_meta'].get('n_clipes', 0)}, loop: {loop_infinito})")
 
     p_roteiro.roteiro = roteiro
 
     # ── 3. Pacote de post ────────────────────────────────────────────────────
     # voz/visual/trilha/render removidos — o vídeo é feito no Google Vids.
-    pacote = montar_pacote(p_roteiro, estilo=estilo, gancho_texto=gancho_texto)
+    pacote = montar_pacote(p_roteiro, estilo=estilo, gancho_texto=gancho_texto, loop_infinito=loop_infinito)
     log.append("pacote: pronto")
 
     # ── 4. Atualiza status na planilha ───────────────────────────────────────
@@ -163,6 +165,7 @@ def montar_pacote(
     p: Produto,
     estilo: str = "chocante",
     gancho_texto: str = "",
+    loop_infinito: bool = True,
 ) -> Path:
     """Gera pacote_post.txt com tudo que vai pro YouTube Studio, Meta Suite e TikTok."""
     r = p.roteiro or {}
@@ -171,9 +174,9 @@ def montar_pacote(
 
     # Títulos para YouTube Shorts
     titulos = r.get("titulos_shorts") or [
-        f"Melhor achadinho da Shopee! #{num} #Shorts",
-        f"Não compre antes de ver isso! #{num} #Shorts",
-        f"Esse achadinho me surpreendeu #{num} #Shorts",
+        f"Esse achadinho me surpreendeu! #{num}",
+        f"Não compre #{num} antes de ver isso",
+        f"Achadinho por R$ {p.preco or 'XX'} — vale ver",
     ]
     titulos_txt = "\n".join(f"  • {t}" for t in titulos)
 
@@ -187,7 +190,7 @@ def montar_pacote(
 
     comentario_shorts = r.get(
         "comentario_fixo_shorts",
-        f"🛒 O link oficial desse achadinho tá fixado no perfil do canal! É o produto #{num} na nossa vitrine.",
+        f"🛒 Tá no perfil do canal! Procura o achadinho {num} — é esse aqui.",
     )
 
     comentario_insta = r.get(
@@ -245,6 +248,7 @@ def montar_pacote(
         "",
         "── 📋 RASTREABILIDADE ──",
         f"Gerado com estilo: {estilo_label}",
+        f"Loop Infinito: {'Sim (Seamless Loop)' if loop_infinito else 'Não'}",
         f"Clipes usados: {r.get('_meta', {}).get('n_clipes', '?')}",
         f"Gancho ângulo: {_angulo_do_gancho(p.pasta)}",
     ]
@@ -272,6 +276,7 @@ def processar_lote(
     forcar: bool = False,
     estilo: str = "chocante",
     usar_ganchos: bool = True,
+    loop_infinito: bool = True,
 ) -> list[dict]:
     """Processa a lista de produtos da planilha (todos, ou só os IDs passados)."""
     prods = ler_produtos()
@@ -280,7 +285,9 @@ def processar_lote(
         if ids and p.id not in ids:
             continue
         try:
-            res = processar_produto(p, forcar=forcar, estilo=estilo, usar_ganchos=usar_ganchos)
+            res = processar_produto(
+                p, forcar=forcar, estilo=estilo, usar_ganchos=usar_ganchos, loop_infinito=loop_infinito
+            )
             resultados.append({"id": p.id, **res})
         except Exception as exc:
             logger.error("Falha em %s: %s", p.id, exc)
@@ -320,6 +327,7 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     forcar = "--forcar" in args
     sem_ganchos = "--sem-ganchos" in args
+    sem_loop = "--sem-loop" in args
 
     # extrai --estilo <valor>
     estilo = "chocante"
@@ -343,6 +351,7 @@ if __name__ == "__main__":
         forcar=forcar,
         estilo=estilo,
         usar_ganchos=not sem_ganchos,
+        loop_infinito=not sem_loop,
     )
 
     print()

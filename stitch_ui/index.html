@@ -174,6 +174,13 @@
               </span>
               {{ carregandoDeploy ? 'Atualizando...' : 'Atualizar Vitrine' }}
             </button>
+            <button @click="abrirMetricasVitrine()" :disabled="carregandoMetricas"
+                    class="w-full mt-1.5 py-1.5 px-2 rounded-lg bg-surface-container border border-outline-variant/40 text-on-surface hover:text-primary hover:border-primary/40 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-50">
+              <span class="material-symbols-outlined text-[15px]" :class="carregandoMetricas ? 'animate-spin' : ''">
+                {{ carregandoMetricas ? 'progress_activity' : 'monitoring' }}
+              </span>
+              Métricas de Cliques
+            </button>
           </div>
 
           <div class="p-3.5 rounded-xl bg-surface-container border border-outline-variant/30 shadow-lg relative overflow-hidden">
@@ -819,6 +826,143 @@
       </div>
     </div>
 
+    <!-- ==================== MODAL MÉTRICAS DA VITRINE ==================== -->
+    <div v-if="modalMetricas" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
+      <div class="w-full max-w-3xl max-h-[92vh] rounded-2xl bg-surface-container-low border border-primary/40 shadow-2xl flex flex-col overflow-hidden relative my-auto">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/20 bg-surface-container/60">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-primary border border-primary/30">
+              <span class="material-symbols-outlined text-[22px]">monitoring</span>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-on-surface">Métricas da Vitrine</h3>
+              <p class="text-xs text-on-surface-variant font-medium" v-if="metricasVitrine">
+                GoatCounter · {{ metricasVitrine.periodo.inicio }} a {{ metricasVitrine.periodo.fim }}
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1">
+              <button v-for="d in [7, 30, 90]" :key="d" @click="trocarDiasMetricas(d)"
+                      :class="diasMetricas === d ? 'bg-primary text-on-primary font-bold' : 'bg-surface-container text-on-surface-variant hover:text-on-surface border border-outline-variant/30'"
+                      class="px-2 py-1 rounded-md text-[11px] transition-all">{{ d }}d</button>
+            </div>
+            <button @click="modalMetricas = false" class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+              <span class="material-symbols-outlined text-[22px]">close</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 flex flex-col gap-4 overflow-y-auto">
+
+          <div v-if="carregandoMetricas" class="py-12 flex flex-col items-center gap-2 text-on-surface-variant">
+            <span class="animate-spin material-symbols-outlined text-[28px] text-primary">progress_activity</span>
+            <span class="text-xs">Carregando métricas...</span>
+          </div>
+
+          <div v-else-if="erroMetricas" class="py-10 text-center flex flex-col items-center gap-2">
+            <span class="material-symbols-outlined text-[30px] text-on-surface-variant">error</span>
+            <p class="text-sm text-on-surface">{{ erroMetricas }}</p>
+            <button @click="carregarMetricasVitrine()" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/40 text-xs text-on-surface hover:text-primary">Tentar de novo</button>
+          </div>
+
+          <template v-else-if="metricasVitrine">
+            <!-- KPIs -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/30">
+                <p class="text-[10px] text-on-surface-variant font-bold uppercase">Visitas</p>
+                <p class="text-2xl font-extrabold text-on-surface">{{ metricasVitrine.visitantes }}</p>
+              </div>
+              <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/30">
+                <p class="text-[10px] text-on-surface-variant font-bold uppercase">Cliques Shopee</p>
+                <p class="text-2xl font-extrabold text-secondary">{{ metricasVitrine.cliques_cta }}</p>
+              </div>
+              <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/30">
+                <p class="text-[10px] text-on-surface-variant font-bold uppercase">CTR</p>
+                <p class="text-2xl font-extrabold text-primary">{{ metricasVitrine.ctr_pct }}%</p>
+              </div>
+              <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/30">
+                <p class="text-[10px] text-on-surface-variant font-bold uppercase">In-app (IG/TikTok)</p>
+                <p class="text-2xl font-extrabold text-on-surface">{{ metricasVitrine.visitas_inapp }}</p>
+              </div>
+            </div>
+
+            <!-- Produtos mais clicados -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-on-surface flex items-center gap-1">
+                <span class="material-symbols-outlined text-[15px] text-secondary">trophy</span>
+                Produtos mais clicados
+              </label>
+              <div v-if="metricasVitrine.produtos_clicados.length" class="rounded-xl border border-outline-variant/30 overflow-hidden">
+                <table class="w-full text-xs">
+                  <thead class="bg-surface-container text-on-surface-variant">
+                    <tr><th class="text-left px-3 py-2 font-semibold">Produto</th><th class="text-left px-3 py-2 font-semibold">Posição</th><th class="text-right px-3 py-2 font-semibold">Cliques</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="p in metricasVitrine.produtos_clicados.slice(0, 10)" :key="p.id + p.posicao" class="border-t border-outline-variant/20">
+                      <td class="px-3 py-1.5 font-mono font-bold text-on-surface">#{{ p.id }}</td>
+                      <td class="px-3 py-1.5 text-on-surface-variant">{{ p.posicao }}</td>
+                      <td class="px-3 py-1.5 text-right font-bold text-secondary">{{ p.cliques }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-else class="text-xs text-on-surface-variant py-2">Nenhum clique no botão da Shopee no período.</p>
+            </div>
+
+            <!-- Buscas sem resultado -->
+            <div v-if="metricasVitrine.buscas_falhas.length" class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-on-surface flex items-center gap-1">
+                <span class="material-symbols-outlined text-[15px] text-primary">search_off</span>
+                Buscas sem resultado (falta cadastrar)
+              </label>
+              <div class="rounded-xl border border-outline-variant/30 overflow-hidden">
+                <table class="w-full text-xs">
+                  <thead class="bg-surface-container text-on-surface-variant">
+                    <tr><th class="text-left px-3 py-2 font-semibold">O que buscaram</th><th class="text-right px-3 py-2 font-semibold">Vezes</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="b in metricasVitrine.buscas_falhas.slice(0, 10)" :key="b.termo" class="border-t border-outline-variant/20">
+                      <td class="px-3 py-1.5 text-on-surface">{{ b.termo }}</td>
+                      <td class="px-3 py-1.5 text-right font-bold text-primary">{{ b.buscas }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Origem do tráfego -->
+            <div v-if="metricasVitrine.referrers.length" class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-on-surface flex items-center gap-1">
+                <span class="material-symbols-outlined text-[15px] text-on-surface-variant">language</span>
+                De onde vem o tráfego
+              </label>
+              <div class="rounded-xl border border-outline-variant/30 overflow-hidden">
+                <table class="w-full text-xs">
+                  <thead class="bg-surface-container text-on-surface-variant">
+                    <tr><th class="text-left px-3 py-2 font-semibold">Origem</th><th class="text-right px-3 py-2 font-semibold">Visitas</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="r in metricasVitrine.referrers.slice(0, 8)" :key="r.url" class="border-t border-outline-variant/20">
+                      <td class="px-3 py-1.5 text-on-surface truncate max-w-[280px]">{{ r.url || '(acesso direto)' }}</td>
+                      <td class="px-3 py-1.5 text-right font-bold text-on-surface">{{ r.visitas }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <p class="text-[10px] text-on-surface-variant">
+              Fonte: GoatCounter {{ metricasVitrine.site }} · atualiza a cada 60s · use ?semanalytics na URL da vitrine pra não contabilizar suas próprias visitas.
+            </p>
+          </template>
+        </div>
+      </div>
+    </div>
+
     <!-- ==================== MODAL EDITAR PRODUTO ==================== -->
     <div v-if="modalEdicao" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
       <div class="w-full max-w-2xl max-h-[92vh] rounded-2xl bg-surface-container-low border border-primary/40 shadow-2xl flex flex-col overflow-hidden relative my-auto">
@@ -1324,6 +1468,13 @@
           preco: '',
           link_afiliado: ''
         });
+
+        // ─── Métricas da vitrine (GoatCounter) ───────────────────────────────
+        const modalMetricas = ref(false);
+        const carregandoMetricas = ref(false);
+        const metricasVitrine = ref(null);
+        const erroMetricas = ref('');
+        const diasMetricas = ref(30);
 
         // ─── Edição de produto existente ────────────────────────────────────
         const modalEdicao = ref(false);
@@ -1910,6 +2061,36 @@
           }
         }
 
+        async function abrirMetricasVitrine() {
+          modalMetricas.value = true;
+          await carregarMetricasVitrine();
+        }
+
+        async function carregarMetricasVitrine() {
+          carregandoMetricas.value = true;
+          erroMetricas.value = '';
+          try {
+            const res = await fetch(`/api/vitrine/metricas?dias=${diasMetricas.value}`);
+            const data = await res.json();
+            if (res.ok && data.sucesso) {
+              metricasVitrine.value = data.metricas;
+            } else {
+              metricasVitrine.value = null;
+              erroMetricas.value = data.detail || 'Erro ao carregar métricas';
+            }
+          } catch (e) {
+            metricasVitrine.value = null;
+            erroMetricas.value = 'Falha na conexão com o servidor local';
+          } finally {
+            carregandoMetricas.value = false;
+          }
+        }
+
+        async function trocarDiasMetricas(d) {
+          diasMetricas.value = d;
+          await carregarMetricasVitrine();
+        }
+
         function abrirModalEdicao(p) {
           formEdicao.value = {
             id: p.ID,
@@ -1997,6 +2178,14 @@
           carregandoLegenda,
           modalNovo,
           formNovo,
+          modalMetricas,
+          carregandoMetricas,
+          metricasVitrine,
+          erroMetricas,
+          diasMetricas,
+          abrirMetricasVitrine,
+          carregarMetricasVitrine,
+          trocarDiasMetricas,
           modalEdicao,
           salvandoEdicao,
           formEdicao,

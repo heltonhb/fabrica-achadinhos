@@ -497,13 +497,31 @@ class ConfigHookReq(BaseModel):
 
 @app.get("/api/vitrine/status")
 def api_vitrine_status():
+    from analytics import codigo_site
+
     hook_url = obter_segredo("VERCEL_DEPLOY_HOOK")
     vitrine_url = obter_segredo("VERCEL_VITRINE_URL") or "https://fabrica-achadinhos-three.vercel.app"
     return {
         "vitrine_url": vitrine_url,
         "tem_hook": bool(hook_url),
-        "hook_mascarado": f"{hook_url[:28]}..." if hook_url else ""
+        "hook_mascarado": f"{hook_url[:28]}..." if hook_url else "",
+        "tem_token_analytics": bool(obter_segredo("GOATCOUNTER_API_TOKEN")),
+        "analytics_site": codigo_site(),
     }
+
+
+@app.get("/api/vitrine/metricas")
+def api_vitrine_metricas(dias: int = 30):
+    """Resumo de métricas da vitrine (GoatCounter): visitas, cliques por produto e buscas."""
+    from analytics import ErroAnalytics, estatisticas_vitrine
+
+    try:
+        return {"sucesso": True, "metricas": estatisticas_vitrine(dias=dias)}
+    except ErroAnalytics as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # pragma: inesperado
+        logger.error(f"Erro ao buscar métricas da vitrine: {exc}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar métricas: {exc}")
 
 
 @app.post("/api/vitrine/deploy")

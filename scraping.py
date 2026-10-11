@@ -217,12 +217,27 @@ _HEADERS = {
 
 # ─── Shopee ──────────────────────────────────────────────────────────────────
 
+def _obter_url_canonica_shopee(url: str) -> str:
+    """Retorna a URL canônica desktop direta da Shopee (/product/{shop_id}/{item_id})."""
+    ids = _parse_shopee_url(url)
+    if ids and ids[0] and ids[1]:
+        return f"https://shopee.com.br/product/{ids[0]}/{ids[1]}"
+    return url
+
+
 def _resolve_short_url(url: str) -> str:
-    """Resolve links curtos (s.shopee.com.br, shope.ee, shp.ee, shopee.link) para a URL completa."""
+    """Resolve links curtos de afiliado (Shopee, Mercado Livre, Amazon, Magalu, etc.) para a URL completa."""
     if not url:
         return ""
-    curtos = ("s.shopee.com.br", "shope.ee", "shp.ee", "shopee.link")
-    if any(dom in url.lower() for dom in curtos):
+    curtos = (
+        "s.shopee.com.br", "shope.ee", "shp.ee", "shopee.link",
+        "meli.la", "mercadolivre.com/sec", "mercadolivre.com.br/sec",
+        "amzn.to", "a.co", "amzn.eu",
+        "magalu.me", "maga.lu",
+        "bit.ly", "tinyurl.com", "t.ly", "cutt.ly", "is.gd",
+    )
+    url_lower = url.lower()
+    if any(dom in url_lower for dom in curtos):
         try:
             resp = requests.head(url, allow_redirects=True, timeout=10, headers=_HEADERS)
             if resp.url and resp.url != url and "error" not in resp.url.lower():
@@ -490,21 +505,24 @@ def _shopee_midia_navegador(url: str) -> dict | None:
     except ImportError:
         return None
 
+    url_canonica = _obter_url_canonica_shopee(_resolve_short_url(url))
     try:
         with sync_playwright() as pw:
-            headless_mode = not bool(os.environ.get("DISPLAY"))
             nav = pw.chromium.launch(
-                headless=headless_mode,
+                headless=True,
                 args=[
                     "--no-sandbox",
                     "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--disable-dev-shm-usage",
                 ],
             )
             ctx = nav.new_context(
                 locale="pt-BR",
-                user_agent=_HEADERS["User-Agent"],
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 800},
             )
+            ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
             page = ctx.new_page()
 
             videos_coletados = []
@@ -516,11 +534,12 @@ def _shopee_midia_navegador(url: str) -> dict | None:
                         videos_coletados.append(r_url)
 
             page.on("response", _on_response)
-            page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            page.goto(url_canonica, wait_until="domcontentloaded", timeout=45_000)
 
-            for _ in range(8):
-                page.wait_for_timeout(1500)
-                if "Ofertas incríveis" not in page.title():
+            for _ in range(20):
+                page.wait_for_timeout(400)
+                t = page.title()
+                if t and "ofertas incríveis" not in t.lower() and "loading" not in t.lower():
                     break
 
             srcs = page.eval_on_selector_all(
@@ -905,46 +924,59 @@ def _normalizar_preco(txt) -> str:
     return n
 
 
-def _cadastro_por_ia(url: str) -> dict | None:
-    """Camada 1 (nuvem): Gemini com busca do Google lê o índice da web.
+def _cadastro_por_ia(
+    url: str,
+    titulo: str = "",
+    descricao: str = "",
+    nicho_base: str = "",
+) -> dict | None:
+    """Camada 1 (nuvem): Gemini lê o índice da web ou refina dados já extraídos.
 
-    A Shopee bloqueia acesso automatizado direto (API, página, leitores),
-    mas a página do produto está indexada no Google com nome, preço e
-    categoria — o grounding busca essa página e devolve os dados.
+    Se titulo/descricao já foram obtidos pelo scraper/navegador, o Gemini
+    apenas formata o nome comercial limpo, define o nicho comercial perfeito
+    e estima o preço (caso não tenha vindo da página), sem precisar de
+    grounding externo pesado.
 
-    As chamadas são agendadas (máximo 1 a cada ~10s). Se o tempo de
-    aguardo for excedido, retorna None (fila cheia) para que o fluxo
-    principal não bloqueie por mais tempo.
-
-    Retorna:
-      - dict com nome/nicho/preco se o modelo retornou os 3 campos
-        de forma confiável
-      - None se a LLM falhar, não retornou os campos esperados,
-        ou se a fila estourar o timeout
+    Se nenhum dado estiver disponível, tenta localizar via busca/link.
     """
     url_pesquisa = _resolve_short_url(url)
     ids = _parse_shopee_url(url_pesquisa)
     contexto = f" (itemid {ids[1]}, loja {ids[0]})" if ids else ""
     slug_dica = extrair_slug_shopee(url_pesquisa)
-    dica_nome = f" Nome/slug provável no link: '{slug_dica}'." if slug_dica else ""
+
     sistema = (
-        "Você extrai dados de produtos Shopee para preencher uma planilha. "
-        "Limpe termos promocionais e sufixos (ex: 'Frete Grátis', 'Pronta Entrega', '| Shopee Brasil'). "
+        "Você extrai e organiza dados de produtos para um catálogo/planilha de achadinhos. "
+        "Limpe termos promocionais e sufixos desnecessários (ex: 'Frete Grátis', 'Pronta Entrega', '| Shopee Brasil'). "
         "Responda SOMENTE com o JSON pedido — sem comentários, sem markdown."
     )
-    pedido = (
-        f"Produto na Shopee: {url_pesquisa}{contexto}.{dica_nome} "
-        "Use a busca do Google para localizar a página EXATA deste produto. "
-        'Responda apenas com: {"nome": "<nome curto do produto em português>", '
-        '"preco": "<preço médio atual, ex: 79,99>", '
-        '"nicho": "<categoria/nicho em português>"} '
-        'Use "" para o que não conseguir encontrar.'
-    )
+
+    if titulo:
+        pedido = (
+            f"Analise estes dados do produto coletados da loja:\n"
+            f"Título original: {titulo}\n"
+            f"Categoria detectada: {nicho_base}\n"
+            f"Descrição: {descricao[:400]}\n"
+            f"Link: {url_pesquisa}\n\n"
+            'Responda apenas com: {"nome": "<nome curto e atraente do produto em português>", '
+            '"preco": "<preço médio atual estimado em formato 00,00, ex: 79,90>", '
+            '"nicho": "<categoria/nicho comercial em português>"}'
+        )
+    else:
+        dica_nome = f" Nome/slug provável no link: '{slug_dica}'." if slug_dica else ""
+        pedido = (
+            f"Produto na Shopee/loja: {url_pesquisa}{contexto}.{dica_nome}\n"
+            "Se o link contiver o nome do produto no slug, use-o para extrair os dados.\n"
+            "ATENÇÃO: Se você não sabe com certeza qual é o produto real deste link "
+            "(ex: link curto ou apenas IDs numéricos sem o nome no link), retorne obrigatoriamente:\n"
+            '{"nome": "", "preco": "", "nicho": ""}\n'
+            "NUNCA invente ou alucine um produto.\n"
+            'Responda apenas com: {"nome": "<nome curto em português>", '
+            '"preco": "<preço médio atual>", "nicho": "<nicho em português>"}'
+        )
 
     # Espera o agendador liberar espaço (timeout curto para não bloquear UI)
     tempo_restante = _tempo_orm_de_IA()
     if tempo_restante is not None and tempo_restante > 12.0:
-        # aguardar até o próximo lance
         time.sleep(min(tempo_restante, 12.0))
 
     try:
@@ -952,9 +984,9 @@ def _cadastro_por_ia(url: str) -> dict | None:
             sistema, pedido,
             temperature=0.2,
             response_mime_type="application/json",
-            prazo_total_s=60.0,
+            prazo_total_s=30.0,
             esperar_janela_429=False,
-            ferramentas_google=True,
+            ferramentas_google=False,
         )
     except Exception as exc:
         _on_IA_chamada_concluida(pedido)
@@ -979,8 +1011,8 @@ def _cadastro_por_ia(url: str) -> dict | None:
 
     _on_IA_chamada_concluida(pedido)
 
-    # só conta como sucesso se nome + preco estiverem presentes
-    if not nome or not preco:
+    # só conta como sucesso se pelo menos o nome estiver presente
+    if not nome:
         return None
     return {"nome": nome, "nicho": nicho, "preco": preco}
 
@@ -1010,55 +1042,269 @@ def _erro_gemini_detalhado(last_error: str) -> str:
     return f"Gemini falhou ({tipo}): {msg}"
 
 
-def _cadastro_navegador(url: str) -> dict | None:
-    """Camada 2 (local): abre uma janela real do Chrome no PC do usuário.
+def _extrair_shopee_navegador(page, url_final: str, nav) -> dict | None:
+    """Extrai dados de produto Shopee usando a página canônica e Playwright stealth."""
+    url_alvo = _obter_url_canonica_shopee(url_final)
+    try:
+        page.goto(url_alvo, wait_until="domcontentloaded", timeout=45_000)
+    except Exception:
+        pass
 
-    O desafio anti-bot da Shopee passa sozinho em navegador "humano"
-    (comprovado em testes), mas é instável — roda só como fallback e
-    apenas quando há tela (DISPLAY); na nuvem desiste na hora.
-    """
+    html = ""
+    title = ""
+    for _ in range(25):
+        page.wait_for_timeout(350)
+        try:
+            t = page.title()
+            if t and "ofertas incríveis" not in t.lower() and "loading" not in t.lower():
+                title = t
+                html = page.content()
+                break
+        except Exception:
+            continue
+
+    if not html:
+        try:
+            html = page.content()
+            title = page.title()
+        except Exception:
+            pass
+
+    meta = dict(re.findall(
+        r'<meta[^>]*property="(og:title|og:description|og:image)"[^>]*content="([^"]*)"', html
+    ))
+    nome = _limpar_nome_produto((meta.get("og:title") or title or "").strip())
+    if not nome or "Ofertas incríveis" in nome or "Shopee Brasil" in nome:
+        nav.close()
+        return None
+
+    # Nicho: Schema.org BreadcrumbList primeiro
+    nicho = ""
+    for b in re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, re.DOTALL):
+        try:
+            obj = json.loads(b)
+            if obj.get("@type") == "BreadcrumbList":
+                crumbs = [x.get("item", {}).get("name") for x in obj.get("itemListElement", []) if x.get("item", {}).get("name")]
+                if len(crumbs) >= 3:
+                    nicho = crumbs[2] if len(crumbs) > 3 else crumbs[1]
+                elif len(crumbs) >= 2:
+                    nicho = crumbs[1]
+        except Exception:
+            pass
+
+    if not nicho:
+        try:
+            dom_cats = page.eval_on_selector_all(
+                'a[href*="/categories/"], a[href*="/category/"], nav a',
+                "els => els.map(e => e.textContent.trim()).filter(Boolean)",
+            )
+            if dom_cats:
+                nicho = dom_cats[-1]
+        except Exception:
+            pass
+
+    if not nicho:
+        nicho = _classificar_por_nome(nome)
+
+    # Preço: HTML regex com centavos obrigatórios (R$ 123,45) para não capturar cupons
+    precos = re.findall(r"R\$\s*[\d.]+(?:,\d{2})", html)
+    preco = ""
+    if precos:
+        preco = _normalizar_preco(precos[0])
+    if not preco:
+        try:
+            dom_precos = page.eval_on_selector_all(
+                'div[class*="price" i], span[class*="price" i]',
+                "els => els.map(e => e.textContent.trim()).filter(Boolean)",
+            )
+            for dp in dom_precos:
+                np = _normalizar_preco(dp)
+                if np:
+                    preco = np
+                    break
+        except Exception:
+            pass
+
+    nav.close()
+    return {
+        "nome": nome,
+        "nicho": nicho,
+        "preco": preco,
+        "descricao": meta.get("og:description", ""),
+        "imagem": meta.get("og:image", ""),
+    }
+
+
+def _extrair_mercadolivre_navegador(page, url: str, nav) -> dict | None:
+    """Extrai dados de produto Mercado Livre via Playwright."""
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+        page.wait_for_timeout(1000)
+        html = page.content()
+    except Exception:
+        html = ""
+
+    meta = dict(re.findall(r'<meta[^>]*property="(og:title|og:description|og:image)"[^>]*content="([^"]*)"', html))
+    nome = meta.get("og:title") or page.title()
+    nome = re.sub(r"\s*\|\s*Mercado\s*Livre.*$", "", nome, flags=re.I).strip()
+
+    preco = ""
+    ld = _extrair_shopee_ld_json(html)
+    if ld and ld.get("preco"):
+        preco = ld["preco"]
+    if not preco:
+        m_preco = re.search(r'class="andes-money-amount__fraction"[^>]*>([\d.]+)<', html)
+        if m_preco:
+            m_cents = re.search(r'class="andes-money-amount__cents"[^>]*>(\d+)<', html)
+            cents = m_cents.group(1) if m_cents else "00"
+            preco = f"{m_preco.group(1)},{cents}"
+    if not preco:
+        precos = re.findall(r"R\$\s*[\d.]+(?:,\d{2})?", html)
+        if precos:
+            preco = _normalizar_preco(precos[0])
+
+    cats = page.eval_on_selector_all(
+        ".andes-breadcrumb__item a, a[class*='breadcrumb']",
+        "els => els.map(e => e.textContent.trim()).filter(Boolean)",
+    )
+    nicho = cats[-1] if cats else _classificar_por_nome(nome)
+
+    nav.close()
+    return {
+        "nome": nome,
+        "nicho": nicho,
+        "preco": _normalizar_preco(preco),
+        "descricao": meta.get("og:description", ""),
+        "imagem": meta.get("og:image", ""),
+    }
+
+
+def _extrair_amazon_navegador(page, url: str, nav) -> dict | None:
+    """Extrai dados de produto Amazon via Playwright."""
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+        page.wait_for_timeout(1000)
+        html = page.content()
+    except Exception:
+        html = ""
+
+    meta = dict(re.findall(r'<meta[^>]*property="(og:title|og:description|og:image)"[^>]*content="([^"]*)"', html))
+    nome = meta.get("og:title") or page.title()
+    nome = re.sub(r"\s*:\s*Amazon\.com\.br.*$", "", nome, flags=re.I).strip()
+
+    preco = ""
+    try:
+        m_whole = page.eval_on_selector(".a-price-whole", "el => el.textContent.trim()")
+        m_fraction = page.eval_on_selector(".a-price-fraction", "el => el.textContent.trim()")
+        if m_whole:
+            preco = f"{m_whole},{m_fraction or '00'}"
+    except Exception:
+        pass
+    if not preco:
+        precos = re.findall(r"R\$\s*[\d.]+(?:,\d{2})?", html)
+        if precos:
+            preco = _normalizar_preco(precos[0])
+
+    try:
+        cats = page.eval_on_selector_all(
+            "#wayfinding-breadcrumbs_container a",
+            "els => els.map(e => e.textContent.trim()).filter(Boolean)",
+        )
+        nicho = cats[-1] if cats else _classificar_por_nome(nome)
+    except Exception:
+        nicho = _classificar_por_nome(nome)
+
+    nav.close()
+    return {
+        "nome": nome,
+        "nicho": nicho,
+        "preco": _normalizar_preco(preco),
+        "descricao": meta.get("og:description", ""),
+        "imagem": meta.get("og:image", ""),
+    }
+
+
+def _extrair_magalu_navegador(page, url: str, nav) -> dict | None:
+    """Extrai dados de produto Magazine Luiza via Playwright."""
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+        page.wait_for_timeout(1000)
+        html = page.content()
+    except Exception:
+        html = ""
+
+    meta = dict(re.findall(r'<meta[^>]*property="(og:title|og:description|og:image)"[^>]*content="([^"]*)"', html))
+    nome = meta.get("og:title") or page.title()
+    nome = re.sub(r"\s*-\s*Magazine\s*Luiza.*$", "", nome, flags=re.I).strip()
+
+    ld = _extrair_shopee_ld_json(html)
+    preco = ld.get("preco", "") if ld else ""
+    if not preco:
+        precos = re.findall(r"R\$\s*[\d.]+(?:,\d{2})?", html)
+        if precos:
+            preco = _normalizar_preco(precos[0])
+
+    try:
+        cats = page.eval_on_selector_all(
+            "[data-testid='breadcrumb-item'] a, nav a",
+            "els => els.map(e => e.textContent.trim()).filter(Boolean)",
+        )
+        nicho = cats[-1] if cats else _classificar_por_nome(nome)
+    except Exception:
+        nicho = _classificar_por_nome(nome)
+
+    nav.close()
+    return {
+        "nome": nome,
+        "nicho": nicho,
+        "preco": _normalizar_preco(preco),
+        "descricao": meta.get("og:description", ""),
+        "imagem": meta.get("og:image", ""),
+    }
+
+
+def _cadastro_navegador(url: str) -> dict | None:
+    """Camada 2 (local): abre o navegador Playwright stealth para capturar dados da página."""
     if not os.environ.get("DISPLAY"):
         return None
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         return None
+
+    url_final = _resolve_short_url(url)
+    url_lower = url_final.lower()
+
     try:
         with sync_playwright() as pw:
-            nav = pw.chromium.launch(headless=False, args=["--no-sandbox"])
-            ctx = nav.new_context(locale="pt-BR")
-            page = ctx.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-            html = ""
-            # espera desafio passar + SPA renderizar (até ~24s)
-            for _ in range(12):
-                page.wait_for_timeout(2000)
-                html = page.content()
-                if "Ofertas incríveis" not in page.title() and re.search(
-                    r"R\$\s*[\d.]+,\d{2}", html
-                ):
-                    break
-            meta = dict(re.findall(
-                r'<meta[^>]*property="(og:title|og:description)"[^>]*content="([^"]*)"', html
-            ))
-            cats = page.eval_on_selector_all(
-                'a[href*="/categories/"]',
-                "els => els.map(e => e.textContent.trim()).filter(Boolean)",
+            nav = pw.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--disable-dev-shm-usage",
+                ],
             )
-            nav.close()
+            ctx = nav.new_context(
+                locale="pt-BR",
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+            )
+            ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+            page = ctx.new_page()
+
+            if "mercadolivre" in url_lower or "meli." in url_lower:
+                return _extrair_mercadolivre_navegador(page, url_final, nav)
+            elif "amazon" in url_lower or "amzn" in url_lower:
+                return _extrair_amazon_navegador(page, url_final, nav)
+            elif "magalu" in url_lower or "magazinevoce" in url_lower:
+                return _extrair_magalu_navegador(page, url_final, nav)
+            else:
+                return _extrair_shopee_navegador(page, url_final, nav)
     except Exception as exc:  # noqa: BLE001 — fallback não pode quebrar o fluxo
         print(f"[cadastro] navegador falhou: {exc}")
         return None
-
-    nome = _limpar_nome_produto((meta.get("og:title") or "").strip())
-    if not nome or "Ofertas incríveis" in nome or "Shopee Brasil" in nome:
-        return None  # parou no desafio/captcha
-    precos = re.findall(r"R\$\s*[\d.]+,\d{2}", html)
-    return {
-        "nome": nome,
-        "nicho": (cats[-1].strip() if cats else ""),
-        "preco": _normalizar_preco(precos[0]) if precos else "",
-    }
 
 
 def extrair_cadastro(link: str) -> dict:
@@ -1066,29 +1312,19 @@ def extrair_cadastro(link: str) -> dict:
 
     Ordem de tentativas (definida em PROGESSAO_CADASTRO):
       1. Cache em memória (evita rechamar a IA)
-      2. Gemini + busca do Google (nuvem)
-      3. Navegador real no PC local (Playwright)
-
-    Regras de qualidade:
-      - A camada só "conta" se entregar os 3 campos (nome, nicho, preco)
-        com dados válidos. Campos parciais geram fallback.
-      - Cross-check: se a IA e o navegador diferirem o preço em mais de
-        15%, usa o menor (mais conservador, mais próximo do preço final
-        com frete e impostos da Shopee).
-      - Nicho: prioridade é IA, depois DOM/nav, depois derivação do nome.
+      2. Gemini (nuvem)
+      3. Navegador stealth no PC local (Playwright)
 
     Retorna sempre {"nome", "nicho", "preco", "camada", "fonts_usadas",
-    "erro", "faltou_por_campo"}:
-    "camada" diz de onde vieram os dados ("ia" | "navegador" | ""
-    quando nenhum deu certo); "fonts_usadas" lista as fontes consultadas;
-    "faltou_por_campo" indica quais campos estavam ausentes nas fontes.
-    "erro" explica a falha quando não há dados.
+    "erro", "faltou_por_campo"}.
     """
     link = (link or "").strip()
     if not link:
-        return {"nome": "", "nicho": "", "preco": "", "camada": "",
-                "fonts_usadas": [], "erro": "Cole o link do produto primeiro.",
-                "faltou_por_campo": []}
+        return {
+            "nome": "", "nicho": "", "preco": "", "camada": "",
+            "fonts_usadas": [], "erro": "Cole o link do produto primeiro.",
+            "faltou_por_campo": [],
+        }
 
     url_norm = _resolve_short_url(link)
 
@@ -1100,7 +1336,7 @@ def extrair_cadastro(link: str) -> dict:
             "nicho": cache.get("nicho", ""),
             "preco": cache.get("preco", ""),
             "camada": "ia",
-            "fonts_usadas": ["cache"], 
+            "fonts_usadas": ["cache"],
             "erro": "",
             "faltou_por_campo": [],
         }
@@ -1109,123 +1345,85 @@ def extrair_cadastro(link: str) -> dict:
     fonts_usadas: list[str] = []
     campos_faltantes: set[str] = set()
 
-    # 2. Camada IA
+    # 2. Camada IA direta
+    ia = None
     try:
         ia = _cadastro_por_ia(link)
     except Exception as exc:  # noqa: BLE001
         ia = None
         motivos.append(f"IA: {str(exc)[:110]}")
-    if ia is not None:
+
+    if ia and ia.get("nome") and ia.get("preco"):
         fonts_usadas.append("ia")
-        if ia.get("nome"):
-            ia_nome = ia["nome"]
-        else:
-            ia_nome = ""
-            campos_faltantes.add("nome")
-        if ia.get("preco"):
-            ia_preco = ia["preco"]
-        else:
-            ia_preco = ""
+        _guardar_cadastro_cache(url_norm, ia)
+        return {
+            "nome": ia["nome"],
+            "nicho": ia.get("nicho", ""),
+            "preco": ia["preco"],
+            "camada": "ia",
+            "fonts_usadas": fonts_usadas,
+            "erro": "",
+            "faltou_por_campo": [],
+        }
+
+    # 3. Camada Navegador local stealth
+    nav = None
+    try:
+        nav = _cadastro_navegador(link)
+    except Exception as exc:  # noqa: BLE001
+        nav = None
+        motivos.append(f"Navegador: {str(exc)[:110]}")
+
+    if nav and nav.get("nome"):
+        fonts_usadas.append("navegador")
+        nome_nav = nav["nome"]
+        nicho_nav = nav.get("nicho", "") or _classificar_por_nome(nome_nav)
+        preco_nav = nav.get("preco", "")
+
+        # Se faltou preço válido com centavos ou nicho, usa IA para refinar com os dados reais
+        preco_incompleto = not preco_nav or ("," not in preco_nav)
+        if preco_incompleto or not nicho_nav:
+            try:
+                ia_refino = _cadastro_por_ia(
+                    link,
+                    titulo=nome_nav,
+                    descricao=nav.get("descricao", ""),
+                    nicho_base=nicho_nav,
+                )
+                if ia_refino:
+                    if preco_incompleto and ia_refino.get("preco"):
+                        preco_nav = ia_refino["preco"]
+                    if not nicho_nav and ia_refino.get("nicho"):
+                        nicho_nav = ia_refino["nicho"]
+                    fonts_usadas.append("ia")
+            except Exception:
+                pass
+
+        if not preco_nav:
             campos_faltantes.add("preco")
-        ia_nicho = ia.get("nicho", "")
-        if not ia_nicho:
+        if not nicho_nav:
             campos_faltantes.add("nicho")
 
-    # 3. Camada navegador
-    nav = None
-    if not ia or (not ia.get("nome") or not ia.get("preco")):
-        nav = _cadastro_navegador(link)
-        if nav:
-            fonts_usadas.append("navegador")
-            if nav.get("nome"):
-                nav_nome = nav["nome"]
-            else:
-                nav_nome = ""
-                campos_faltantes.add("nome")
-            if nav.get("preco"):
-                nav_preco = nav["preco"]
-            else:
-                nav_preco = ""
-                campos_faltantes.add("preco")
-            nav_nicho = nav.get("nicho", "")
-            if not nav_nicho:
-                campos_faltantes.add("nicho")
-        else:
-            motivos.append("navegador local indisponível (nuvem ou captcha)")
+        res_final = {
+            "nome": nome_nav,
+            "nicho": nicho_nav,
+            "preco": preco_nav,
+            "camada": "navegador",
+            "fonts_usadas": fonts_usadas,
+            "erro": "",
+            "faltou_por_campo": sorted(campos_faltantes),
+        }
+        _guardar_cadastro_cache(url_norm, res_final)
+        return res_final
 
-    # 4. Decide o resultado final
-    if ia and nav:
-        # Cross-check: se houver divergência de preço acima de 15%,
-        # usa o menor (mais conservador).
-        ia_preco_num = _extrair_numero_precificacao(ia.get("preco"))
-        nav_preco_num = _extrair_numero_precificacao(nav.get("preco"))
-        if ia_preco_num is not None and nav_preco_num is not None:
-            divergencia = abs(ia_preco_num - nav_preco_num) / max(ia_preco_num, nav_preco_num)
-            if divergencia > 0.15:
-                preco_final = min(ia_preco_num, nav_preco_num)
-                ia_preco = _borderar_preco(f"{preco_final:.2f}")
-                motivos.append(
-                    f"Preço divergente entre IA e navegador ({ia.get('preco')} vs {nav.get('preco')}); "
-                    f"usando menor ({preco_final:.2f})"
-                )
-
-        # Nome: prefere IA, se não, navegador
-        nome_final = ia.get("nome") or nav.get("nome") or ""
-        if not nome_final:
-            campos_faltantes.discard("nome")
-
-        # Nicho: prioridade IA, depois DOM/nav
-        nicho_final = ia.get("nicho") or nav.get("nicho") or ""
-        if not nicho_final:
-            nicho_derivado = _classificar_por_nome(nome_final)
-            if nicho_derivado:
-                nicho_final = nicho_derivado
-                motivos.append(f"Nicho derivado do nome: {nicho_final}")
-            else:
-                campos_faltantes.add("nicho")
-
-        # Preço final: preferência para o da IA, se disponível
-        preco_final = ia.get("preco")
-        if not preco_final and nav.get("preco"):
-            preco_final = nav["preco"]
-
-        if nome_final and preco_final:
-            _guardar_cadastro_cache(url_norm, {
-                "nome": nome_final,
-                "nicho": nicho_final,
-                "preco": preco_final,
-            })
-            return {
-                "nome": nome_final,
-                "nicho": nicho_final,
-                "preco": preco_final,
-                "camada": "ia",
-                "fonts_usadas": fonts_usadas,
-                "erro": "" if not motivos else " ".join(motivos[:2]),
-                "faltou_por_campo": sorted(campos_faltantes),
-            }
-
-    elif ia:
-        # Só IA: encerra logo se faltar algum campo crítico
-        if campos_faltantes:
-            _guardar_cadastro_cache(url_norm, {
-                "nome": ia.get("nome", ""),
-                "nicho": ia.get("nicho", ""),
-                "preco": ia.get("preco", ""),
-            })
-            if "nome" not in campos_faltantes and "preco" not in campos_faltantes:
-                return {
-                    "nome": ia.get("nome", ""),
-                    "nicho": ia.get("nicho", ""),
-                    "preco": ia.get("preco", ""),
-                    "camada": "ia",
-                    "fonts_usadas": ["ia"],
-                    "erro": "",
-                    "faltou_por_campo": sorted(campos_faltantes),
-                }
-        # IA parciairo: retorna o que conseguiu com aviso
+    # Se a IA retornou pelo menos o nome
+    if ia and ia.get("nome"):
+        if not ia.get("preco"):
+            campos_faltantes.add("preco")
+        if not ia.get("nicho"):
+            campos_faltantes.add("nicho")
         return {
-            "nome": ia.get("nome", ""),
+            "nome": ia["nome"],
             "nicho": ia.get("nicho", ""),
             "preco": ia.get("preco", ""),
             "camada": "ia",
@@ -1234,44 +1432,8 @@ def extrair_cadastro(link: str) -> dict:
             "faltou_por_campo": sorted(campos_faltantes),
         }
 
-    elif nav:
-        if "nome" not in campos_faltantes and "preco" not in campos_faltantes:
-            _guardar_cadastro_cache(url_norm, {
-                "nome": nav["nome"],
-                "nicho": nav.get("nicho", ""),
-                "preco": nav["preco"],
-            })
-            return {
-                "nome": nav["nome"],
-                "nicho": nav.get("nicho", ""),
-                "preco": nav["preco"],
-                "camada": "navegador",
-                "fonts_usadas": ["navegador"],
-                "erro": "",
-                "faltou_por_campo": sorted(campos_faltantes),
-            }
-        return {
-            "nome": nav.get("nome", ""),
-            "nicho": nav.get("nicho", ""),
-            "preco": nav.get("preco", ""),
-            "camada": "navegador",
-            "fonts_usadas": ["navegador"],
-            "erro": "",
-            "faltou_por_campo": sorted(campos_faltantes),
-        }
-
     # Nenhuma camada conseguiu
     erro_detalhado = "⚠️ Extração indisponível agora — preencha os campos à mão."
-    if fonts_usadas:
-        if "ia" in fonts_usadas and "navegador" in fonts_usadas:
-            erro_detalhado += " As duas fontes falharam. Verifique a chave do Gemini e o acesso à internet."
-        elif "ia" in fonts_usadas:
-            erro_detalhado += " A camada de IA (Gemini + Google Search) não retornou dados. "
-            erro_detalhado += "Verifique a chave de API e a cota do serviço."
-        elif "navegador" in fonts_usadas:
-            erro_detalhado += " O navegador (Playwright) falhou ao abrir a página. "
-            erro_detalhado += "Verifique se o Chrome está aberto e se não há bloqueios."
-
     return {
         "nome": "",
         "nicho": "",
@@ -1280,7 +1442,7 @@ def extrair_cadastro(link: str) -> dict:
         "fonts_usadas": fonts_usadas,
         "erro": erro_detalhado,
         "erro_detalhado": erro_detalhado,
-        "faltou_por_campo": sorted(campos_faltantes),
+        "faltou_por_campo": ["nome", "nicho", "preco"],
     }
 
 

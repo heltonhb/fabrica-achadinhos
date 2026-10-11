@@ -151,14 +151,16 @@ def _get_sheets_service():
 
 
 def ler_produtos() -> list[Produto]:
-    """Lê a planilha Google Sheets via export CSV público; fallback: CSV local."""
+    """Lê a planilha Google Sheets via export CSV público com mesclagem e fallback para CSV local."""
+    prods_locais = ler_csv_local(CSV_PATH) if CSV_PATH.exists() else []
+
     try:
         resp = requests.get(_EXPORT_URL, timeout=15)
         resp.raise_for_status()
         texto = resp.text
     except Exception as exc:
         logger.warning("Falha ao ler Google Sheets: %s — usando CSV local", exc)
-        return ler_csv_local(CSV_PATH)
+        return prods_locais
 
     prods = []
     vistos: set[str] = set()
@@ -171,7 +173,15 @@ def ler_produtos() -> list[Produto]:
             continue
         vistos.add(p.id)
         prods.append(p)
-    logger.info("Lidos %d produtos da Google Sheets", len(prods))
+
+    # Preserva produtos do CSV local que ainda não foram para a Google Sheets (ex: sync pendente/token expirado)
+    for pl in prods_locais:
+        if pl.id not in vistos:
+            vistos.add(pl.id)
+            prods.append(pl)
+            logger.info("Produto local preservado (pendente no Sheets): %s (%s)", pl.id, pl.nome)
+
+    logger.info("Lidos %d produtos (Google Sheets + locais)", len(prods))
     return prods
 
 

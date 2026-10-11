@@ -17,6 +17,13 @@ LINK = "https://shopee.com.br/x-i.313660590.22893738408"
 LINK_SHARE = "https://shopee.com.br/opaanlp/313660590/22893738408"
 
 
+@pytest.fixture(autouse=True)
+def limpar_cache():
+    scraping._CADASTRO_CACHE.clear()
+    yield
+    scraping._CADASTRO_CACHE.clear()
+
+
 # ── parsing de URL (sem rede para formatos longos) ───────────────────────────
 def test_parse_url_canonica():
     assert scraping._parse_shopee_url(LINK) == ("313660590", "22893738408")
@@ -209,4 +216,20 @@ def test_extrair_shopee_ld_json():
     assert res["nome"] == "Copo Térmico Inox 473ml"
     assert res["preco"] == "39,90"
     assert res["imagens"] == ["https://down-br.img.susercontent.com/file/br-11134207-copo"]
+
+
+def test_obter_url_canonica_shopee():
+    # URL de redirecionamento móvel vira desktop canônica
+    url_mobile = "https://shopee.com.br/opaanlp/313660590/22893738408?__mobile__=1"
+    assert scraping._obter_url_canonica_shopee(url_mobile) == "https://shopee.com.br/product/313660590/22893738408"
+
+    # URL com slug canônico
+    url_slug = "https://shopee.com.br/produto-teste-i.123.456"
+    assert scraping._obter_url_canonica_shopee(url_slug) == "https://shopee.com.br/product/123/456"
+
+
+def test_resolve_short_url_ignora_links_longos():
+    url = "https://shopee.com.br/product/313660590/22893738408"
+    assert scraping._resolve_short_url(url) == url
+
 

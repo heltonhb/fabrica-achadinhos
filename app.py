@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sheets import Produto, ler_produtos, salvar_produtos, _get_sheets_service
 from config import ESTADOS, proximo_id, obter_segredo, ENV_PATH, normalizar_preco
 from scripts.gerar_vitrine import construir_vitrine, sincronizar_e_atualizar_vitrine
+import analytics
 
 
 def disparar_deploy_vitrine(hook_url: str) -> tuple[bool, str]:
@@ -268,6 +269,65 @@ with st.sidebar:
         with st.spinner("Construindo vitrine/index.html..."):
             res = construir_vitrine()
             st.success(f"Vitrine gerada! {res['elegiveis']} cards ({res['com_imagem']} com imagem).")
+
+    # ─── Métricas da vitrine (GoatCounter) ───────────────────────────────
+    with st.expander("📊 Métricas da Vitrine (GoatCounter)", expanded=False):
+        c_per, c_btn = st.columns([3, 1])
+        with c_per:
+            dias_metricas = st.selectbox(
+                "Período", [7, 30, 90], index=1,
+                key="metricas_vitrine_dias",
+                format_func=lambda d: f"Últimos {d} dias",
+                label_visibility="collapsed",
+            )
+        with c_btn:
+            if st.button("🔄 Atualizar", use_container_width=True, key="btn_metricas_vitrine"):
+                analytics.limpar_cache()
+        try:
+            met = analytics.estatisticas_vitrine(dias=dias_metricas)
+        except analytics.ErroAnalytics as exc:
+            st.warning(str(exc))
+        else:
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("👀 Visitas", met["visitantes"])
+            k2.metric("🛒 Cliques no CTA", met["cliques_cta"])
+            k3.metric("CTR", f"{met['ctr_pct']}%")
+            k4.metric("📱 In-app", met["visitas_inapp"])
+
+            if met["produtos_clicados"]:
+                st.markdown("**🏆 Produtos mais clicados**")
+                st.table([
+                    {"Produto": f"#{p['id']}", "Posição": p["posicao"], "Cliques": p["cliques"]}
+                    for p in met["produtos_clicados"][:10]
+                ])
+            else:
+                st.info("Nenhum clique no botão da Shopee no período ainda.")
+
+            if met["buscas_falhas"]:
+                st.markdown("**🔍 Buscas sem resultado (falta cadastrar!)**")
+                st.table([
+                    {"O que buscaram": f["termo"], "Vezes": f["buscas"]}
+                    for f in met["buscas_falhas"][:10]
+                ])
+
+            if met["filtros"]:
+                st.markdown("**🗂️ Nichos clicados**")
+                st.table([
+                    {"Nicho": f["nicho"], "Cliques": f["cliques"]}
+                    for f in met["filtros"][:8]
+                ])
+
+            if met["referrers"]:
+                st.markdown("**🌐 De onde vem o tráfego**")
+                st.table([
+                    {"Origem": r["url"] or "(acesso direto)", "Visitas": r["visitas"]}
+                    for r in met["referrers"][:8]
+                ])
+
+            st.caption(
+                f"Fonte: GoatCounter ({met['site']}) • {met['periodo']['inicio']} a {met['periodo']['fim']}"
+                + (" • cache de 60s" if met.get("cache") else "")
+            )
 
     st.divider()
     st.markdown("#### Como usar")

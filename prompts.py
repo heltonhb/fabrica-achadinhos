@@ -14,9 +14,14 @@ Regras de contrato (válidas para todos os prompts de criativo):
     * formato vertical 9:16, 1080x1920
     * voz em português brasileiro, informal, sem emoji
     * sem introdução ("Olá", "Ei pessoal") — direto ao gancho
+    * gancho em 0:00-0:02 (máx 6 palavras), primeiro frame já em movimento
+    * pattern interrupt obrigatório em 0:07-0:08 (corte seco, sem voz)
+    * orçamento de palavras POR BEAT, não teto global (32 na P1, 34 na P2)
+    * loop é VISUAL (último frame reenquadra o primeiro), nunca verbal
     * descrição cena a cena com tempo em segundos
     * prompt em inglês, mas diálogo e texto na tela em português
     * sem instrução de legendas (gerada separadamente em legenda.py)
+    * texto na tela: 1 a 3 palavras por beat, palavra-chave em amarelo
     * deve conter CTA final explícito
 
 - Prompt de podcast (NotebookLM):
@@ -43,6 +48,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, asdict
 
 from config import Produto
@@ -160,11 +166,65 @@ VISUAL AND AUDIO RULES (always include in the generated prompt):
 - Voiceover in Brazilian Portuguese, informal, NO emoji
 - No introduction ("Olá, tudo bem?") — go straight to the hook
 - Light background music, must NOT overpower the voice
-- Badge "ACHADINHO" at the top of the video
-- Maximum 30 words of voiceover per part (~10 seconds)
+- Badge "ACHADINHO" at the top of the video, identical position/size in every shot
+- Brisk conversational pace: about 3.5 words per second, NOT slower
+- Frame 1 must already contain motion (camera move, hands, product in use). No static
+  opening frame, no fade-in from black.
 - Describe scene by scene with timing in seconds
 - Be visual: describe what appears on screen, not just what is said
-- Do NOT include subtitle/caption instructions (generated separately)"""
+- Do NOT include subtitle/caption instructions (generated separately)
+
+VOICEOVER BUDGET — the budget is PER BEAT, not a global total. Each beat below
+has its own word cap. Never exceed the cap of a single beat. A shorter video with
+dead air loses more viewers than a slightly dense one.
+
+  Part 1 (0:00–0:10)                         Part 2 (0:10–0:20)
+  0:00–0:02  hook .................. 6 words   0:10–0:11  continuation .... 0 words
+  0:02–0:07  product in use ........ 16 words  0:11–0:16  payoff ........ 18 words
+  0:07–0:08  PATTERN INTERRUPT ...... 0 words   0:16–0:18  price reveal ... 8 words
+  0:08–0:10  setup to payoff ........ 10 words  0:18–0:20  CTA + loop ..... 8 words
+  ------------------- 32 words ----------------  ---------------- 34 words
+  TOTAL: 66 words ≈ 19s of speech + 1s of silence = a full 20 seconds.
+  Do not write less than 60 words total — dead air is wasted reach.
+
+PATTERN INTERRUPT (mandatory, at 0:07–0:08, in every prompt):
+- A hard cut or fast punch-in on the product, with NO voiceover during it
+- It resets attention roughly two thirds of the way through
+- Keep it to one second. It must feel like an accident of editing, not a transition.
+
+ON-SCREEN TEXT:
+- One short text per beat, 1 to 3 words. NEVER a full sentence.
+- The single most important word of each beat in bold yellow, the rest in white
+- Price always visible as plain digits (e.g. "39,90"), never as "só R$"
+- Do not repeat what the voiceover already says out loud
+
+SEAMLESS LOOP (visual, not verbal):
+- The final frame must match the FIRST frame in framing, product position,
+  hand position and lighting — as if the video never stopped
+- Audio cuts clean on the last syllable, zero trailing silence or fade-out
+- The spoken CTA is a SHORT COMPLETE sentence. Do NOT end on an open grammar
+  connector, do NOT trail off, do NOT say "e é exatamente por isso que..." to
+  link back to the hook. The loop is carried by the picture, not by a sentence
+  that splices two clips together. This is what buys back 3–4 seconds of value.
+
+CALL TO ACTION — write it as a fixed sentence, do not improvise:
+- The CTA must name the product number out loud, because the viewer has to find
+  that exact product on the storefront page afterwards. Numbers spoken once are
+  forgotten; a repeated number is searchable.
+- Use one of these exact forms (keep the number, change nothing else):
+    "Vai pro perfil e procura o {N}. É esse aqui."
+    "Tá no perfil do canal, item {N}."
+    "Link no perfil, produto {N}."
+- Say the number SLOWLY and SEPARATELY from the rest of the sentence. Never bury it
+  inside a long clause.
+- NEVER write awkward Portuguese about the link. These are all WRONG:
+  "garanta seu link", "garantir o link", "adquira o seu link". You do not
+  guarantee, acquire or own a link, you FIND it. A link is "no perfil",
+  "tá fixado", "procure".
+- Do not invent possessive constructions around the link. Write plain Brazilian
+  speech: "tá no perfil", "procura no perfil", "é o {N}".
+- If a sentence sounds stilted when read aloud in Portuguese, it is wrong —
+  rewrite it, do not ship it."""
 
 _SYSTEM_PODCAST = """\
 You are a podcast scriptwriter for Brazil, specialized in "marketplace finds."
@@ -186,17 +246,21 @@ def gerar_prompt_video(
     exemplos: list[PostComDesempenho] | None = None,
     uso_inusitado: str | None = None,
     estrategia_parte2: str = "plot_twist",
+    loop_infinito: bool | None = None,
 ) -> list[PromptCriativo]:
     """Gera prompts autocontidos para cada parte do vídeo via Gemini.
 
     Args:
         produto: Dados do produto.
-        plataforma: ``"reels"`` ou ``"tiktok"``.
+        plataforma: ``"reels"``, ``"tiktok"`` ou ``"shorts"``.
         estilo: Uma das chaves de ``ESTILOS`` (chocante, educativo, lifestyle, comparativo).
         exemplos: Posts anteriores com bom desempenho para usar como few-shot examples.
         uso_inusitado: Descrição opcional de um uso criativo/inusitado do produto.
                        Se None, o Gemini sugere um uso livremente.
         estrategia_parte2: ``"plot_twist"`` (uso inusitado) ou ``"qualidade"`` (reforço de qualidade).
+        loop_infinito: Se True, aplica a técnica de Seamless Loop (o final da Parte 2 conecta
+                       sintática e visualmente ao gancho inicial da Parte 1).
+                       Se None, ativa automaticamente quando plataforma for Shorts.
     """
     nome = produto.nome
     nicho = produto.nicho or "general"
@@ -210,16 +274,8 @@ def gerar_prompt_video(
     else:
         plataforma_nome = "Instagram Reels"
 
+    loop_ativo = ("short" in plat_lower) if loop_infinito is None else bool(loop_infinito)
     num_clean = produto.id.replace("#", "")
-    if "short" in plat_lower:
-        bloco_cta = (
-            f'- CTA in the last 3 seconds: "O link com desconto tá no perfil do canal, é o achadinho #{num_clean}!" '
-            f'+ on-screen text badge "🔗 Link no perfil do canal | Código #{num_clean}" with a bright yellow arrow '
-            f'pointing towards the channel profile/avatar.\n'
-            f'- SEAMLESS LOOP: end the dialogue so it links smoothly back to the opening hook without saying goodbye.'
-        )
-    else:
-        bloco_cta = '- CTA in the last 3 seconds: "Comenta QUERO que eu te mando o link!" + yellow arrow to bio'
 
     estilo_info = ESTILOS.get(estilo, ESTILOS["chocante"])
     estilo_label = estilo_info["label"]
@@ -252,6 +308,16 @@ def gerar_prompt_video(
             "fall back to reinforcing product quality instead.\n"
         )
 
+    # Instrução de abertura / loop para Parte 1
+    if loop_ativo:
+        instrucao_loop_p1 = (
+            "- HOOK at 0:00–0:02 (max 6 words), spoken over motion — frame 1 is already moving, "
+            "no static pose, no fade-in. Because this clip loops back into itself, the opening must "
+            "land instantly and read clearly when replayed."
+        )
+    else:
+        instrucao_loop_p1 = "- HOOK at 0:00–0:02 (max 6 words), spoken over motion"
+
     user_p1 = f"""\
 {prefixo}Generate a PROMPT for Part 1 (0-10 seconds) of a 20-second {plataforma_nome} video.
 
@@ -264,14 +330,72 @@ VIDEO STYLE: {estilo_label} — {estilo_desc}
 IMPORTANT: The prompt you generate must be in ENGLISH.
 However, ALL spoken dialogue, on-screen text, and visible text elements must be in BRAZILIAN PORTUGUESE.
 
-Part 1 must contain:
-- HOOK in the first 3 seconds (use the provided hook, adapt to the style)
-- Product shown in real use (3-7s)
-- A second unexpected feature (7-10s) — something surprising
-- Ending that keeps the viewer watching
+Part 1 must contain, with the exact word cap per beat:
+{instrucao_loop_p1}
+- 0:02–0:07 product in real use (max 16 words) — show the result, not the packaging
+- 0:07–0:08 PATTERN INTERRUPT: hard cut or punch-in on the product, NO voiceover
+- 0:08–0:10 setup that creates an open loop for Part 2 (max 10 words)
+- Part 1 total: exactly 32 words of voiceover
 
+On-screen text: one 1–3 word text per beat, key word in bold yellow.
+Total runtime of Part 1: exactly 10 seconds (≈32 words at ~3.5 words/second).
 The prompt must be SELF-CONTAINED — ready to copy and paste into a video generator.
 Do NOT include subtitle/caption instructions (those are generated separately)."""
+
+    # Partes independentes com fallback: a Parte 1 é gerada primeiro para que a
+    # Parte 2 saiba qual é o frame de abertura que o loop visual precisa reenquadrar
+    texto_p1, err_p1 = _gerar_com_fallback(
+        lambda: _chamar_gemini(_SYSTEM_VIDEO_BASE, user_p1, temperature=0.9),
+        f"[ERRO GEMINI] Parte 1 — {plataforma_nome} — {nome}. Gancho: {gancho}",
+        rotulo="Parte 1",
+    )
+
+    # Se a Parte 1 gerou fala real, usa a frase exata como referência do frame de
+    # abertura: o loop visual da Parte 2 precisa reenquadrar aquele mesmo momento.
+    gancho_referencia = gancho
+    if not err_p1 and texto_p1:
+        m = re.search(r'(?:Voiceover|Locu[çc][ãa]o)[^:\n]*:\s*["“]([^"”\n]+)["”]', texto_p1, re.IGNORECASE)
+        if m and len(m.group(1).strip()) > 5:
+            gancho_referencia = m.group(1).strip()
+
+    # Bloco de CTA e Loop para a Parte 2
+    if loop_ativo:
+        if "short" in plat_lower:
+            bloco_cta = (
+                f'- 0:18–0:20 CTA + VISUAL LOOP (max 8 words):\n'
+                f'  * Spoken CTA — use this exact sentence, do not improvise: '
+                f'"Vai pro perfil e procura o {num_clean}. É esse aqui." '
+                f'Say the number {num_clean} slowly and as a separate beat from the rest of the sentence.\n'
+                f'  * Do NOT write "garanta seu link", "adquira o seu link" or any other unnatural phrasing about a link. '
+                f'A link is "no perfil", "tá fixado", "procure" — never something you guarantee, acquire or own.\n'
+                f'  * On-screen badge: "Achadinho {num_clean}" plus "🔗 Link no perfil do canal", with a bright animated arrow pointing to the channel profile/avatar.\n'
+                f'  * AUDIO: cut clean on the final syllable, ZERO trailing silence or fade-out.\n'
+                f'  * VISUAL: in the final 0.5s, the framing, product position, hand position and lighting '
+                f'must snap back to exactly match the opening shot of Part 1.'
+            )
+        else:
+            bloco_cta = (
+                f'- 0:18–0:20 CTA + VISUAL LOOP (max 8 words):\n'
+                f'  * Spoken CTA — use this exact sentence, do not improvise: '
+                f'"Comenta QUERO que eu te mando o link do {num_clean}." '
+                f'Say the number {num_clean} slowly and as a separate beat from the rest of the sentence.\n'
+                f'  * Do NOT write "garanta seu link", "adquira o seu link" or any other unnatural phrasing about a link.\n'
+                f'  * On-screen text: "R$ {preco}" plus "COMENTA QUERO", animated arrow to bio.\n'
+                f'  * AUDIO: cut clean on the final syllable, ZERO trailing silence.\n'
+                f'  * VISUAL: in the final 0.5s, the framing must snap back to match the opening shot of Part 1.'
+            )
+    else:
+        if "short" in plat_lower:
+            bloco_cta = (
+                f'- 0:18–0:20 CTA (max 8 words): use this exact sentence — '
+                f'"Vai pro perfil e procura o {num_clean}. É esse aqui." — and show the price "R$ {preco}" on screen, '
+                f'+ on-screen badge "Achadinho {num_clean}" / "🔗 Link no perfil do canal" with a bright yellow arrow pointing to the channel profile/avatar.'
+            )
+        else:
+            bloco_cta = (
+                f'- 0:18–0:20 CTA (max 8 words): "Comenta QUERO que eu te mando o link do {num_clean}!" '
+                f'+ yellow arrow to bio'
+            )
 
     user_p2 = f"""\
 {prefixo}Generate a PROMPT for Part 2 (10-20 seconds) of a 20-second {plataforma_nome} video.
@@ -279,27 +403,26 @@ Do NOT include subtitle/caption instructions (those are generated separately).""
 PRODUCT: {nome}
 NICHE: {nicho}
 PRICE: R$ {preco}
-OPENING HOOK: {gancho}
+OPENING HOOK OF PART 1: {gancho_referencia}
 VIDEO STYLE: {estilo_label} — {estilo_desc}
 {bloco_uso}
 IMPORTANT: The prompt you generate must be in ENGLISH.
 However, ALL spoken dialogue, on-screen text, and visible text elements must be in BRAZILIAN PORTUGUESE.
 
-Part 2 must contain:
-- TRANSITION at the start (consistent with the style)
-- CREATIVE/UNUSUAL USE of the product (12-17s) — the "wow" moment
+Part 2 must contain, with the exact word cap per beat:
+- 0:10–0:11 continuation of Part 1, no voiceover, visual only
+- 0:11–0:16 CREATIVE/UNUSUAL USE of the product — the "wow" moment (max 18 words)
+- 0:16–0:18 price reveal, the number spoken clearly (max 8 words)
 {bloco_cta}
-- Faster rhythm than Part 1
+- Part 2 total: exactly 34 words of voiceover
+
+On-screen text: one 1–3 word text per beat, key word in bold yellow. The price
+must be readable as plain digits on screen at 0:16–0:18.
+Total runtime of Part 2: exactly 10 seconds (≈34 words at ~3.5 words/second).
 
 The prompt must be SELF-CONTAINED.
 Do NOT include subtitle/caption instructions (those are generated separately)."""
 
-    # Partes independentes: falha em uma não zera a outra
-    texto_p1, err_p1 = _gerar_com_fallback(
-        lambda: _chamar_gemini(_SYSTEM_VIDEO_BASE, user_p1, temperature=0.9),
-        f"[ERRO GEMINI] Parte 1 — {plataforma_nome} — {nome}. Gancho: {gancho}",
-        rotulo="Parte 1",
-    )
     texto_p2, err_p2 = _gerar_com_fallback(
         lambda: _chamar_gemini(_SYSTEM_VIDEO_BASE, user_p2, temperature=0.9),
         f"[ERRO GEMINI] Parte 2 — {plataforma_nome} — {nome}. Plot twist + CTA.",
@@ -321,7 +444,13 @@ Do NOT include subtitle/caption instructions (those are generated separately).""
         )
 
     n_exemplos = len(exemplos) if exemplos else 0
-    meta_base = {"plataforma": plataforma, "estilo": estilo, "fonte": "gemini", "few_shot": n_exemplos}
+    meta_base = {
+        "plataforma": plataforma,
+        "estilo": estilo,
+        "fonte": "gemini",
+        "few_shot": n_exemplos,
+        "loop_infinito": loop_ativo,
+    }
     meta_p1 = {**meta_base, "parte": "1", "duracao": "10s"}
     meta_p2 = {**meta_base, "parte": "2", "duracao": "10s"}
     if err_p1:

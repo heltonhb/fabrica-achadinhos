@@ -27,29 +27,31 @@ from config import GEMINI_API_KEY
 logger = logging.getLogger(__name__)
 
 # Modelos em ordem de preferência (mais rápido/barato primeiro).
-# Os últimos três são fallbacks verificados (lite/preview costumam
-# ter fila menor quando os flash principais estão em 503/429).
+# Modelos em ordem de preferência (mais rápido/estável primeiro).
 MODELOS_PADRAO: list[str] = [
-    "gemini-3.5-flash",
-    "gemini-3.6-flash",
+    "gemini-flash-lite-latest",
     "gemini-flash-latest",
     "gemini-3.5-flash-lite",
-    "gemini-flash-lite-latest",
+    "gemini-3.5-flash",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
     "gemini-3-flash-preview",
 ]
 
 # Tentativas por modelo para erros transientes (503 / resposta vazia).
-TENTATIVAS_POR_MODELO = 4
-_ESPERA_BASE_S = 1.5
-_ESPERA_MAX_S = 20.0
+# Mantemos baixo (2) para falhar rápido para o próximo modelo se um estiver instável.
+TENTATIVAS_POR_MODELO = 2
+_ESPERA_BASE_S = 1.0
+_ESPERA_MAX_S = 4.0
 
 # Prazo máximo de uma chamada inteira (todos os modelos somados).
-PRAZO_TOTAL_S = 150.0
+PRAZO_TOTAL_S = 90.0
 
 # 429: uma tentativa por modelo por rodada; no máximo 2 rodadas por chamada,
 # com uma única espera coletiva baseada no "retry in Ns" da própria API.
 _RODADAS = 2
-_ESPERA_429_MAX_S = 40.0
+_ESPERA_429_MAX_S = 30.0
 _RE_429_RETRY = re.compile(r"retry in ([\d.]+)\s*s", re.IGNORECASE)
 
 # Erros de instabilidade temporária — valem backoff no MESMO modelo.
@@ -60,7 +62,7 @@ def _espera_recoveravel(tentativa: int, msg: str) -> float | None:
     """Segundos para esperar, ou None se o erro não for recuperável."""
     if not any(code in msg for code in _CODIGOS_RECUPERAVEIS):
         return None
-    # 1.5, 3, 6, 12… (503 costuma ceder com mais tentativas)
+    # 1.0s, 2.0s... transição rápida para outro modelo da lista
     return min(_ESPERA_MAX_S, _ESPERA_BASE_S * (2 ** tentativa))
 
 
@@ -260,10 +262,26 @@ def _chamar_gemini(
             )
             time.sleep(espera)
             continue
-        break
-
     estourou = not _prazo_ok()
     prazo_txt = f" (prazo total de {prazo:.0f}s estourado)" if estourou else ""
+    if ferramentas_google and not estourou:
+        logger.warning(
+            "Gemini falhou com ferramentas_google (provável restrição de cota de grounding). Tentando sem ferramentas..."
+        )
+        try:
+            return _chamar_gemini(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+                response_mime_type=response_mime_type,
+                modelos=modelos,
+                prazo_total_s=prazo,
+                esperar_janela_429=esperar_janela_429,
+                ferramentas_google=False,
+            )
+        except Exception:
+            pass
+
     raise RuntimeError(
         f"Gemini não respondeu em nenhum modelo disponível{prazo_txt}. Último erro: {ultimo_erro}"
     )

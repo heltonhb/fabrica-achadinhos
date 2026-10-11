@@ -190,6 +190,37 @@ def test_atualizar_preco_nao_numerico_e_preservado(monkeypatch):
         cache.preco = antes
 
 
+def test_api_vitrine_metricas_ok(monkeypatch):
+    import analytics
+
+    fake = {"visitantes": 10, "cliques_cta": 2, "ctr_pct": 20.0}
+    monkeypatch.setattr(analytics, "estatisticas_vitrine", lambda **kw: fake)
+
+    resp = client.get("/api/vitrine/metricas?dias=7")
+    assert resp.status_code == 200
+    assert resp.json()["metricas"]["ctr_pct"] == 20.0
+
+
+def test_api_vitrine_metricas_erro_amigavel(monkeypatch):
+    import analytics
+
+    def _explode(**_kw):
+        raise analytics.ErroAnalytics("Token do GoatCounter inválido ou expirado.")
+
+    monkeypatch.setattr(analytics, "estatisticas_vitrine", _explode)
+
+    resp = client.get("/api/vitrine/metricas")
+    assert resp.status_code == 400
+    assert "Token do GoatCounter" in resp.json()["detail"]
+
+
+def test_vitrine_status_reporta_analytics():
+    resp = client.get("/api/vitrine/status")
+    dados = resp.json()
+    assert "tem_token_analytics" in dados
+    assert "analytics_site" in dados
+
+
 def test_normalizar_preco_formatos():
     from config import normalizar_preco
 
