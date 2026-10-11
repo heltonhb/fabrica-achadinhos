@@ -21,7 +21,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sheets import Produto, ler_produtos, salvar_produtos, _get_sheets_service
-from config import ESTADOS, proximo_id, obter_segredo, ENV_PATH
+from config import ESTADOS, proximo_id, obter_segredo, ENV_PATH, normalizar_preco
 from scripts.gerar_vitrine import construir_vitrine, sincronizar_e_atualizar_vitrine
 
 
@@ -124,6 +124,7 @@ def _gerar_prompts_salvos(params: dict) -> list:
             p, tipo, estilo,
             uso_inusitado=params.get("uso_inusitado"),
             estrategia_parte2=params.get("estrategia", "plot_twist"),
+            loop_infinito=params.get("loop_infinito"),
         )
     if tipo == "podcast":
         return [gerar_prompt_podcast(p)]
@@ -312,21 +313,63 @@ if secao == "📋 Produtos":
         # tabela de produtos
         for i, p in enumerate(st.session_state.produtos):
             with st.expander(f"**{p.id}** — {p.nome}  |  {p.status}  |  R$ {p.preco}", expanded=False):
-                c1, c2 = st.columns([2, 1])
-                with c1:
-                    st.markdown(f"**Nicho:** {p.nicho}")
-                    st.markdown(f"**Gancho:** {p.gancho}")
-                    st.markdown(f"**Comissão:** R$ {p.comissao}")
-                    st.markdown(f"**Link Afiliado:** {p.link_afiliado}")
-                    st.markdown(f"**Link Vitrine:** {p.link_vitrine}")
-                with c2:
-                    st.markdown(f"**Data Postagem:** {p.data_postagem}")
-                    st.markdown(f"**Pasta Mídias:** {p.pasta_midias}")
-                    st.markdown(f"**Agendado:** {p.post_agendado}")
-                    if p.prompt_criativo:
-                        st.success("✅ Prompt gerado")
+                # ── Edição dos campos (fonte única: planilha via salvar_produtos) ──
+                with st.form(f"form_edicao_{p.id}_{i}", clear_on_submit=False):
+                    st.markdown("**✏️ Editar dados do produto**")
+                    e1, e2 = st.columns(2)
+                    with e1:
+                        ed_nome = st.text_input("Nome do produto", value=p.nome, key=f"ed_nome_{p.id}_{i}")
+                        ed_nicho = st.text_input("Nicho", value=p.nicho, key=f"ed_nicho_{p.id}_{i}")
+                        ed_preco = st.text_input(
+                            "Preço médio (R$)", value=p.preco, key=f"ed_preco_{p.id}_{i}",
+                            placeholder="39,90", help="Aceita 39,90 ou 39.90 — salva normalizado.",
+                        )
+                        ed_comissao = st.text_input("Comissão estimada (R$)", value=p.comissao, key=f"ed_com_{p.id}_{i}")
+                    with e2:
+                        ed_link_af = st.text_input("Link afiliado", value=p.link_afiliado, key=f"ed_linkaf_{p.id}_{i}")
+                        ed_link_vit = st.text_input("Link vitrine (bio)", value=p.link_vitrine, key=f"ed_linkvit_{p.id}_{i}")
+                        ed_data = st.text_input(
+                            "Data da postagem", value=p.data_postagem, key=f"ed_data_{p.id}_{i}",
+                            placeholder="dd/mm/aaaa",
+                        )
+                    ag1, ag2 = st.columns(2)
+                    with ag1:
+                        ed_gancho = st.text_area("Gancho", value=p.gancho, key=f"ed_gancho_{p.id}_{i}", height=70)
+                    with ag2:
+                        ed_obs = st.text_area("Observações", value=p.observacoes, key=f"ed_obs_{p.id}_{i}", height=70)
+                    salvar_edicao = st.form_submit_button("💾 Salvar alterações", use_container_width=True, type="primary")
+
+                if salvar_edicao:
+                    novos = {
+                        "nome": ed_nome.strip(),
+                        "nicho": ed_nicho.strip(),
+                        "preco": normalizar_preco(ed_preco),
+                        "comissao": normalizar_preco(ed_comissao),
+                        "link_afiliado": ed_link_af.strip(),
+                        "link_vitrine": ed_link_vit.strip(),
+                        "gancho": ed_gancho.strip(),
+                        "observacoes": ed_obs.strip(),
+                        "data_postagem": ed_data.strip(),
+                    }
+                    if not novos["nome"]:
+                        st.error("⚠️ O nome do produto não pode ficar vazio.")
                     else:
-                        st.warning("⏳ Prompt pendente")
+                        try:
+                            for campo, valor in novos.items():
+                                setattr(p, campo, valor)
+                            salvar_produtos(st.session_state.produtos)
+                            st.success(f"✅ {p.id} atualizado na planilha.")
+                            st.caption("⚠️ A vitrine da Vercel só muda com um deploy novo: use 🚀 Atualizar Vitrine no Ar.")
+                        except Exception as exc:
+                            st.error(f"Falha ao salvar: {exc}")
+
+                st.caption(
+                    f"🎬 Pasta mídias: {p.pasta_midias or '—'}  •  📅 Agendado: {p.post_agendado or '—'}"
+                )
+                if p.prompt_criativo:
+                    st.success("✅ Prompt gerado")
+                else:
+                    st.warning("⏳ Prompt pendente")
 
                 # edição de status (fonte única: planilha via salvar_produtos)
                 st.markdown("**Status:**")
@@ -1043,19 +1086,33 @@ if secao == "🤖 Gerar Prompt":
 
         st.divider()
 
-        # ── PASSO 2.5: Estratégia da Parte 2 ─────────────────────────────
-        st.markdown("### Estratégia da Parte 2")
+        # ── PASSO 2.5: Estratégia da Parte 2 & Loop ──────────────────────
+        st.markdown("### Configurações da Parte 2")
 
-        estrategia = st.radio(
-            "O que fazer na Parte 2 (10-20s)?",
-            ["🎭 Plot Twist (uso inusitado)", "💎 Reforço de Qualidade"],
-            horizontal=True,
-            key="estrategia_radio",
-            help=(
-                "🎭 Plot Twist — mostra um uso criativo/inesperado do produto\n"
-                "💎 Qualidade — reforça materiais, durabilidade, custo-benefício"
-            ),
-        )
+        col_estrat, col_loop = st.columns([1.3, 1.1])
+        with col_estrat:
+            estrategia = st.radio(
+                "O que fazer na Parte 2 (10-20s)?",
+                ["🎭 Plot Twist (uso inusitado)", "💎 Reforço de Qualidade"],
+                horizontal=True,
+                key="estrategia_radio",
+                help=(
+                    "🎭 Plot Twist — mostra um uso criativo/inesperado do produto\n"
+                    "💎 Qualidade — reforça materiais, durabilidade, custo-benefício"
+                ),
+            )
+        with col_loop:
+            tipo_atual = mapa_tipo.get(tipo_criativo, "reels")
+            loop_padrao = (tipo_atual == "shorts")
+            loop_infinito = st.checkbox(
+                "🔁 Loop Infinito (Seamless Loop)",
+                value=loop_padrao,
+                key="loop_infinito_checkbox",
+                help=(
+                    "Conecta a última frase da Parte 2 e a cena final diretamente ao gancho inicial da Parte 1, "
+                    "fazendo o vídeo rodar em repetição contínua sem quebras perceptíveis (retenção > 100%)."
+                ),
+            )
 
         if estrategia.startswith("🎭"):
             estrategia_val = "plot_twist"
@@ -1088,6 +1145,7 @@ if secao == "🤖 Gerar Prompt":
                 "estilo": estilo_sel,
                 "uso_inusitado": uso_inusitado_val,
                 "estrategia": estrategia_val,
+                "loop_infinito": loop_infinito,
             }
             st.session_state.prompt_gerado = None
             st.session_state.params_geracao = params
@@ -1130,8 +1188,13 @@ if secao == "🤖 Gerar Prompt":
                     )
 
                 estilo_meta = prompt.metadados.get("estilo", "")
+                leg_partes = []
                 if estilo_meta and estilo_meta in ESTILOS:
-                    st.caption(f"Estilo: {ESTILOS[estilo_meta]['label']}")
+                    leg_partes.append(f"Estilo: {ESTILOS[estilo_meta]['label']}")
+                if prompt.metadados.get("loop_infinito"):
+                    leg_partes.append("🔁 Seamless Loop Ativo")
+                if leg_partes:
+                    st.caption(" • ".join(leg_partes))
 
                 st.markdown(f"**{prompt.produto_nome}**")
 

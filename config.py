@@ -58,6 +58,35 @@ COLUNAS = [
 ]
 
 
+def normalizar_preco(valor: str) -> str:
+    """Normaliza preço/comissão digitados pelo usuário: 'R$ 39,90', '39.90' -> '39,90'.
+
+    Valor que não for interpretável como número é devolvido como estava.
+    """
+    bruto = (valor or "").strip()
+    v = bruto.replace("R$", "").strip().replace(" ", "")
+    if not v:
+        return ""
+    try:
+        if "," in v:
+            v = v.replace(".", "").replace(",", ".")
+        elif v.count(".") == 1 and len(v.rsplit(".", 1)[1]) <= 2:
+            pass  # vírgula decimal implícita (ex: 39.90)
+        else:
+            v = v.replace(".", "")  # separador de milhar (ex: 1.234)
+        inteiro, _, dec = f"{float(v):.2f}".partition(".")
+        if len(inteiro) > 3:  # milhar no formato pt-BR: 1.234,56
+            partes = []
+            while len(inteiro) > 3:
+                partes.insert(0, inteiro[-3:])
+                inteiro = inteiro[:-3]
+            partes.insert(0, inteiro)
+            inteiro = ".".join(partes)
+        return f"{inteiro},{dec}"
+    except ValueError:
+        return bruto
+
+
 @dataclass
 class Produto:
     """Um achadinho da planilha."""

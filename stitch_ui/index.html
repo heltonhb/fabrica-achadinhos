@@ -445,6 +445,9 @@
                       <span class="material-symbols-outlined text-[15px]">subtitles</span>
                       <span>Legenda</span>
                     </button>
+                    <button @click.stop="abrirModalEdicao(p)" class="py-1.5 px-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface hover:text-white text-xs font-medium flex items-center justify-center gap-1 hover:bg-surface-container-high active:scale-95 transition-all" title="Editar dados do produto (preço, nome, links...)">
+                      <span class="material-symbols-outlined text-[15px]">edit</span>
+                    </button>
                     <button @click.stop="baixarMidias(p)" class="py-1.5 px-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface hover:text-white text-xs font-medium flex items-center justify-center gap-1 hover:bg-surface-container-high active:scale-95 transition-all" title="Baixar mídias e B-Roll">
                       <span class="material-symbols-outlined text-[15px]">download</span>
                     </button>
@@ -576,6 +579,15 @@
                     class="flex-1 py-1 px-1 rounded-md text-[11px] transition-all flex items-center justify-center">
                     {{ plat.label }}
                   </button>
+                </div>
+
+                <!-- Toggle Loop Infinito -->
+                <div class="flex items-center justify-between px-1 py-1 bg-surface-container-lowest/60 rounded-lg border border-outline-variant/20">
+                  <label class="flex items-center gap-1.5 cursor-pointer text-[11px] text-on-surface select-none">
+                    <input type="checkbox" v-model="loopInfinitoPrompt" class="rounded accent-primary">
+                    <span class="font-medium">🔁 Loop Infinito (Seamless Loop)</span>
+                  </label>
+                  <span class="text-[10px] text-secondary font-mono">Retenção > 100%</span>
                 </div>
 
                 <!-- Tabs: Parte 1 | Parte 2 | Ambas -->
@@ -802,6 +814,88 @@
           </button>
           <button @click="salvarNovoProduto()" :disabled="!formNovo.nome" class="px-4 py-1.5 rounded-lg bg-gradient-to-r from-primary-container to-secondary text-black font-bold text-xs shadow-lg disabled:opacity-50">
             Salvar Achadinho
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== MODAL EDITAR PRODUTO ==================== -->
+    <div v-if="modalEdicao" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
+      <div class="w-full max-w-2xl max-h-[92vh] rounded-2xl bg-surface-container-low border border-primary/40 shadow-2xl flex flex-col overflow-hidden relative my-auto">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/20 bg-surface-container/60">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-primary border border-primary/30">
+              <span class="material-symbols-outlined text-[22px]">edit_square</span>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-on-surface">Editar Achadinho <span class="font-mono text-secondary">{{ formEdicao.id }}</span></h3>
+              <p class="text-xs text-on-surface-variant font-medium">Salva direto na Google Sheets — fonte única da vitrine.</p>
+            </div>
+          </div>
+          <button @click="modalEdicao = false" class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+            <span class="material-symbols-outlined text-[22px]">close</span>
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 flex flex-col gap-3 overflow-y-auto">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-on-surface-variant">Nome do Produto:</label>
+            <input v-model="formEdicao.nome" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-primary" placeholder="Ex: Kit 6 Tapete De Banheiro"/>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-on-surface-variant">Nicho:</label>
+              <input v-model="formEdicao.nicho" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-primary" placeholder="banheiro, cozinha, casa..."/>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-on-surface-variant">Preço Médio (R$):</label>
+              <input v-model="formEdicao.preco" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-primary" placeholder="39,90"/>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-on-surface-variant">Comissão Est. (R$):</label>
+              <input v-model="formEdicao.comissao" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-primary" placeholder="3,50"/>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-on-surface-variant">Data da Postagem:</label>
+              <input v-model="formEdicao.data_postagem" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-primary" placeholder="dd/mm/aaaa"/>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-on-surface-variant">Link Afiliado Shopee:</label>
+            <input v-model="formEdicao.link_afiliado" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-primary" placeholder="https://s.shopee.com.br/..."/>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-on-surface-variant">Link Vitrine (Bio):</label>
+            <input v-model="formEdicao.link_vitrine" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-primary" placeholder="https://s.shopee.com.br/..."/>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-on-surface-variant">Gancho:</label>
+              <textarea v-model="formEdicao.gancho" rows="2" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-primary resize-none" placeholder="Seu banheiro fica parecendo hotel 5 estrelas com esse kit!"></textarea>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-on-surface-variant">Observações:</label>
+              <textarea v-model="formEdicao.observacoes" rows="2" class="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-primary resize-none" placeholder="Notas internas, preço errado na captura, etc."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-outline-variant/20">
+          <button @click="modalEdicao = false" class="px-3 py-1.5 rounded-lg bg-surface-container text-xs text-on-surface hover:bg-surface-container-high">
+            Cancelar
+          </button>
+          <button @click="salvarEdicaoProduto()" :disabled="salvandoEdicao || !formEdicao.nome" class="px-4 py-1.5 rounded-lg bg-gradient-to-r from-primary-container to-secondary text-black font-bold text-xs shadow-lg disabled:opacity-50 flex items-center gap-1">
+            <span v-if="!salvandoEdicao" class="material-symbols-outlined text-[15px]">save</span>
+            <span v-else class="animate-spin material-symbols-outlined text-[15px]">progress_activity</span>
+            {{ salvandoEdicao ? 'Salvando...' : 'Salvar Alterações' }}
           </button>
         </div>
       </div>
@@ -1205,6 +1299,7 @@
         const promptParte2 = ref('');
         const abaPrompt = ref('parte1'); // 'parte1', 'parte2', 'ambas'
         const plataformaPrompt = ref('shorts'); // 'shorts', 'reels', 'tiktok'
+        const loopInfinitoPrompt = ref(true);
         const carregandoPrompt = ref(false);
         const carregandoLegenda = ref(false);
         const modalLegenda = ref(false);
@@ -1228,6 +1323,22 @@
           nicho: '',
           preco: '',
           link_afiliado: ''
+        });
+
+        // ─── Edição de produto existente ────────────────────────────────────
+        const modalEdicao = ref(false);
+        const salvandoEdicao = ref(false);
+        const formEdicao = ref({
+          id: '',
+          nome: '',
+          nicho: '',
+          preco: '',
+          comissao: '',
+          link_afiliado: '',
+          link_vitrine: '',
+          gancho: '',
+          observacoes: '',
+          data_postagem: ''
         });
 
         const toast = ref({
@@ -1495,7 +1606,8 @@
               body: JSON.stringify({ 
                 produto_id: produtoSelecionado.value.ID,
                 estilo: estiloGancho.value,
-                plataforma: plataformaPrompt.value
+                plataforma: plataformaPrompt.value,
+                loop_infinito: loopInfinitoPrompt.value
               })
             });
             const data = await res.json();
@@ -1759,16 +1871,19 @@
               body: JSON.stringify({ url: formNovo.value.url })
             });
             const data = await res.json();
-            if (data.sucesso && data.dados) {
+            if (data.sucesso && data.dados && data.dados.nome) {
               const d = data.dados;
               formNovo.value.nome = d.nome || '';
               formNovo.value.preco = d.preco || '';
               formNovo.value.nicho = d.nicho || 'Geral';
               formNovo.value.link_afiliado = formNovo.value.url;
-              mostrarToast('Dados extraídos com IA da página!');
+              mostrarToast('Dados extraídos da página!');
+            } else {
+              formNovo.value.link_afiliado = formNovo.value.url;
+              mostrarToast(data.erro || 'Não foi possível extrair automaticamente. Preencha os campos abaixo.', 'erro');
             }
           } catch (e) {
-            mostrarToast('Não foi possível extrair dados automaticamente', 'erro');
+            mostrarToast('Não foi possível extrair dados automaticamente. Preencha os campos abaixo.', 'erro');
           } finally {
             carregandoScrape.value = false;
           }
@@ -1792,6 +1907,57 @@
             }
           } catch (e) {
             mostrarToast('Erro ao cadastrar achadinho', 'erro');
+          }
+        }
+
+        function abrirModalEdicao(p) {
+          formEdicao.value = {
+            id: p.ID,
+            nome: p['Nome do Produto'] || '',
+            nicho: p.Nicho || '',
+            preco: p['Preco Medio (R$)'] || '',
+            comissao: p['Comissao Est (R$)'] || '',
+            link_afiliado: p['Link Afiliado Shopee'] || '',
+            link_vitrine: p['Link Vitrine (Bio)'] || '',
+            gancho: p['Roteiro / Gancho'] || '',
+            observacoes: p.Observacoes || '',
+            data_postagem: p['Data Postagem'] || ''
+          };
+          modalEdicao.value = true;
+        }
+
+        async function salvarEdicaoProduto() {
+          const f = formEdicao.value;
+          if (!f.id || !f.nome) return;
+          salvandoEdicao.value = true;
+          try {
+            const res = await fetch(`/api/produtos/${encodeURIComponent(f.id)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                nome: f.nome,
+                nicho: f.nicho,
+                preco: f.preco,
+                comissao: f.comissao,
+                link_afiliado: f.link_afiliado,
+                link_vitrine: f.link_vitrine,
+                gancho: f.gancho,
+                observacoes: f.observacoes,
+                data_postagem: f.data_postagem
+              })
+            });
+            const data = await res.json();
+            if (res.ok && data.sucesso) {
+              mostrarToast(`✅ ${f.id} atualizado na planilha!`);
+              modalEdicao.value = false;
+              await recarregarDados();
+            } else {
+              mostrarToast(data.detail || 'Erro ao salvar produto', 'erro');
+            }
+          } catch (e) {
+            mostrarToast('Erro ao salvar produto', 'erro');
+          } finally {
+            salvandoEdicao.value = false;
           }
         }
 
@@ -1826,10 +1992,16 @@
           promptParte2,
           abaPrompt,
           plataformaPrompt,
+          loopInfinitoPrompt,
           carregandoPrompt,
           carregandoLegenda,
           modalNovo,
           formNovo,
+          modalEdicao,
+          salvandoEdicao,
+          formEdicao,
+          abrirModalEdicao,
+          salvarEdicaoProduto,
           carregandoScrape,
           modalLegenda,
           estiloLegenda,

@@ -112,7 +112,7 @@ def test_api_pipeline_executar(monkeypatch, tmp_path):
     monkeypatch.setattr(
         server,
         "processar_produto",
-        lambda prod, forcar, estilo, usar_ganchos: {
+        lambda prod, forcar, estilo, usar_ganchos, *a, **kw: {
             "ok": True,
             "log": ["gancho gerado", "pacote pronto"],
             "pacote": str(tmp_path / "pacote_post.txt"),
@@ -129,6 +129,76 @@ def test_api_pipeline_executar(monkeypatch, tmp_path):
     dados = response.json()
     assert dados["sucesso"] is True
     assert "ACHADINHO YOUTUBE SHORTS" in dados["pacote_texto"]
+
+
+def test_atualizar_campos_completos(monkeypatch):
+    import server
+    import urllib.parse
+
+    # nada é persistido de verdade durante o teste (evita gravar no CSV/Sheets)
+    monkeypatch.setattr(server, "salvar_produtos", lambda prods: None)
+
+    res_lista = client.get("/api/produtos")
+    alvo = res_lista.json()[0]
+    pid_enc = urllib.parse.quote(alvo["ID"], safe="")
+    antes = {
+        "nome": alvo["Nome do Produto"],
+        "nicho": alvo["Nicho"],
+        "preco": alvo["Preco Medio (R$)"],
+        "comissao": alvo["Comissao Est (R$)"],
+        "link_vitrine": alvo["Link Vitrine (Bio)"],
+    }
+
+    try:
+        response = client.patch(f"/api/produtos/{pid_enc}", json={
+            "nome": "Produto Teste Edição",
+            "nicho": "casa",
+            "preco": "R$ 39.9",
+            "comissao": "3,50",
+            "link_vitrine": "https://s.shopee.com.br/vitrine-teste",
+        })
+        assert response.status_code == 200
+        p = response.json()["produto"]
+        assert p["Nome do Produto"] == "Produto Teste Edição"
+        assert p["Nicho"] == "casa"
+        assert p["Preco Medio (R$)"] == "39,90"
+        assert p["Comissao Est (R$)"] == "3,50"
+        assert p["Link Vitrine (Bio)"] == "https://s.shopee.com.br/vitrine-teste"
+    finally:
+        # devolve o cache em memória ao estado original
+        cache = next(x for x in server._PRODUTOS_CACHE if x.id == alvo["ID"])
+        for campo, valor in antes.items():
+            setattr(cache, campo, valor)
+
+
+def test_atualizar_preco_nao_numerico_e_preservado(monkeypatch):
+    import server
+    import urllib.parse
+
+    monkeypatch.setattr(server, "salvar_produtos", lambda prods: None)
+    res_lista = client.get("/api/produtos")
+    alvo = res_lista.json()[0]
+    pid_enc = urllib.parse.quote(alvo["ID"], safe="")
+    antes = alvo["Preco Medio (R$)"]
+
+    try:
+        response = client.patch(f"/api/produtos/{pid_enc}", json={"preco": "sob consulta"})
+        assert response.status_code == 200
+        assert response.json()["produto"]["Preco Medio (R$)"] == "sob consulta"
+    finally:
+        cache = next(x for x in server._PRODUTOS_CACHE if x.id == alvo["ID"])
+        cache.preco = antes
+
+
+def test_normalizar_preco_formatos():
+    from config import normalizar_preco
+
+    assert normalizar_preco("39,90") == "39,90"
+    assert normalizar_preco("R$ 39.90") == "39,90"
+    assert normalizar_preco("1.234,56") == "1.234,56"
+    assert normalizar_preco("1234.5") == "1.234,50"
+    assert normalizar_preco("") == ""
+    assert normalizar_preco("sob consulta") == "sob consulta"
 
 
 

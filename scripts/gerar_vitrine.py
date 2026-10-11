@@ -34,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from config import MIDIAS_DIR, Produto
+from config import MIDIAS_DIR, Produto, obter_segredo
 from sheets import ler_produtos
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -43,6 +43,44 @@ logger = logging.getLogger("Vitrine")
 VITRINE_DIR = BASE_DIR / "vitrine"
 ASSETS_DIR = VITRINE_DIR / "assets"
 INDEX_HTML = VITRINE_DIR / "index.html"
+
+# Analytics leve da vitrine (GoatCounter, sem cookies).
+GOATCOUNTER_PADRAO = "helton"
+
+
+def codigo_goatcounter() -> str:
+    """Code do GoatCounter (ex: 'helton' → helton.goatcounter.com).
+
+    Vem de GOATCOUNTER_CODE (env /.env / secret); vazio usa o padrão.
+    Qualquer valor de desativação ('off', '0', 'nao') desliga o rastreamento.
+    """
+    valor = (obter_segredo("GOATCOUNTER_CODE") or GOATCOUNTER_PADRAO).strip()
+    return "" if valor.lower() in {"off", "0", "nao", "no", "desligado", "-"} else valor
+
+
+def _bloco_goatcounter(code: str) -> str:
+    """<script> do GoatCounter no <head> (injetado via JS para ignorar visitas próprias)."""
+    if not code:
+        return "    <script>window.GC_EXCLUIDO = true;</script>\n"
+    code_seguro = html.escape(code, quote=True)
+    return f'''    <!-- Analytics leve: GoatCounter (sem cookies) -->
+    <script>
+        (function () {{
+            var proprio = /(?:^|[?&])semanalytics(?:[=&]|$)/.test(location.search)
+                || location.hostname === 'localhost'
+                || location.hostname === '127.0.0.1';
+            window.GC_EXCLUIDO = proprio;
+            if (proprio) return;
+            window.goatcounter = window.goatcounter || {{}};
+            var s = document.createElement('script');
+            s.async = true;
+            s.src = 'https://gc.zgo.at/count.js';
+            s.setAttribute('data-goatcounter', 'https://{code_seguro}.goatcounter.com/count');
+            document.head.appendChild(s);
+        }})();
+    </script>
+'''
+
 
 
 def filtrar_produtos_vitrine(produtos: list[Produto]) -> list[Produto]:
@@ -57,18 +95,28 @@ def filtrar_produtos_vitrine(produtos: list[Produto]) -> list[Produto]:
     return validos
 
 
+def _numero_id(p: Produto) -> int:
+    """Número do #ID do produto para ordenação (maior = mais recente).
+
+    IDs não numéricos (ex: 'Item A') viram -1 e perdem para qualquer ID numérico.
+    """
+    numeros = re.sub(r"[^\d]", "", p.id or "")
+    return int(numeros) if numeros else -1
+
+
 def selecionar_produto_do_momento(produtos: list[Produto]) -> Produto | None:
     """Seleciona o 'Produto do Momento / Vídeo de Hoje' (Opção B).
 
     1. Filtra produtos com status 'Postado' (case-insensitive).
-    2. Se houver mais de um, seleciona o último da lista (mais recente).
-    3. Se nenhum tiver status 'Postado', usa o último produto cadastrado como fallback.
+    2. Se houver mais de um, seleciona o de maior #ID (mais recente) —
+       não depende da ordem das linhas na planilha.
+    3. Se nenhum tiver status 'Postado', usa o produto de maior #ID como fallback.
     """
     postados = [p for p in produtos if (p.status or "").strip().lower() == "postado"]
     if postados:
-        return postados[-1]
+        return max(postados, key=_numero_id)
     if produtos:
-        return produtos[-1]
+        return max(produtos, key=_numero_id)
     return None
 
 
@@ -311,6 +359,9 @@ def gerar_html_vitrine(
         filtros_html.append(f'<button class="filter-pill" data-filter="{n.lower()}">{n}</button>')
     filtros_str = "\n".join(filtros_html)
 
+    # Analytics (GoatCounter) — injetado só no <head> quando configurado
+    gc_head_html = _bloco_goatcounter(codigo_goatcounter())
+
     return f'''<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -321,6 +372,7 @@ def gerar_html_vitrine(
     <meta property="og:title" content="Fábrica de Achadinhos — Vitrine Oficial">
     <meta property="og:description" content="Confira os achadinhos testados em nossos vídeos com links diretos da Shopee!">
     <meta property="og:type" content="website">
+{gc_head_html}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -970,6 +1022,42 @@ def gerar_html_vitrine(
 
     <script>
         (function() {{
+            // 0. Analytics (GoatCounter): helper de eventos — CTA, busca, filtro, in-app
+            const filaEventos = [];
+            window.__rastrear = function (caminho, titulo) {{
+                if (window.GC_EXCLUIDO) return;
+                const envia = window.goatcounter && typeof window.goatcounter.count === 'function';
+                if (envia) {{
+                    window.goatcounter.count({{ path: caminho, title: titulo || caminho, event: true }});
+                }} else {{
+                    filaEventos.push([caminho, titulo]); // count.js ainda carregando (async)
+                }}
+            }};
+            (function descarregaFila(n) {{
+                if (!filaEventos.length) return;
+                const envia = window.goatcounter && typeof window.goatcounter.count === 'function';
+                if (envia) {{
+                    while (filaEventos.length) {{
+                        const ev = filaEventos.shift();
+                        window.goatcounter.count({{ path: ev[0], title: ev[1] || ev[0], event: true }});
+                    }}
+                    return;
+                }}
+                if (n < 40) setTimeout(function () {{ descarregaFila(n + 1); }}, 500);
+            }})(0);
+
+            // Clique no CTA → /cta/posição/id  (posição: hero ou grade)
+            document.addEventListener('click', (e) => {{
+                const alvo = e.target && e.target.closest ? e.target.closest('a.btn-cta, a.btn-hero-cta') : null;
+                if (!alvo) return;
+                const dono = alvo.closest('article.card') || alvo.closest('section#heroSection');
+                if (!dono) return;
+                const id = (dono.getAttribute('data-id') || '').replace('#', '') || 'sem-id';
+                const posicao = dono.classList.contains('card') ? 'grade' : 'hero';
+                const nicho = dono.getAttribute('data-nicho') || '';
+                window.__rastrear('/cta/' + posicao + '/' + id, 'CTA ' + id + ' [' + posicao + '] ' + nicho);
+            }});
+
             // 1. Detecção de In-App Browser (Instagram, TikTok, YouTube)
             try {{
                 const ua = navigator.userAgent || navigator.vendor || window.opera || '';
@@ -977,6 +1065,11 @@ def gerar_html_vitrine(
                 if (isInApp) {{
                     const banner = document.getElementById('inAppNotice');
                     if (banner) banner.style.display = 'flex';
+                    window.__rastrear('/inapp/visita-inapp', 'Acesso via in-app browser');
+                    const btnFecha = document.querySelector('.inapp-close');
+                    if (btnFecha) btnFecha.addEventListener('click', () => {{
+                        window.__rastrear('/inapp/banner-fechado', 'Banner in-app fechado');
+                    }});
                 }}
             }} catch (err) {{
                 console.warn('Erro ao checar user agent:', err);
@@ -1051,11 +1144,22 @@ def gerar_html_vitrine(
                 }}
             }}
 
-            // Eventos de Busca
+            // Eventos de Busca (+ rastreio do termo e de buscas sem resultado)
+            let aguardaBusca = null;
             searchInput.addEventListener('input', (e) => {{
                 searchQuery = e.target.value.trim().toLowerCase();
                 searchClear.style.display = searchQuery ? 'block' : 'none';
                 updateFilter();
+                clearTimeout(aguardaBusca);
+                const termo = e.target.value.trim();
+                if (!termo) return;
+                aguardaBusca = setTimeout(() => {{
+                    const semResultado = /^Exibindo 0 /.test(countEl.textContent || '');
+                    window.__rastrear(
+                        '/busca/' + (semResultado ? 'sem-resultado' : 'ok') + '/' + encodeURIComponent(termo),
+                        'Busca: ' + termo
+                    );
+                }}, 1500);
             }});
 
             searchClear.addEventListener('click', () => {{
@@ -1073,6 +1177,7 @@ def gerar_html_vitrine(
                     pill.classList.add('active');
                     activeFilter = pill.getAttribute('data-filter');
                     updateFilter();
+                    window.__rastrear('/filtro/' + encodeURIComponent(activeFilter), 'Filtro: ' + activeFilter);
                 }});
             }});
 

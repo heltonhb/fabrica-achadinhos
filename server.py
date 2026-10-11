@@ -21,7 +21,7 @@ from pydantic import BaseModel
 import requests
 
 # Imports do núcleo do projeto
-from config import BASE_DIR, ESTADOS, Produto, proximo_id, obter_segredo, ENV_PATH
+from config import BASE_DIR, ESTADOS, Produto, proximo_id, obter_segredo, ENV_PATH, normalizar_preco
 from sheets import ler_produtos, salvar_produtos
 from scripts.gerar_vitrine import construir_vitrine, sincronizar_e_atualizar_vitrine
 from prompts import gerar_prompt_video, gerar_todos_prompts, ESTILOS
@@ -63,10 +63,14 @@ class ExtrairUrlReq(BaseModel):
 
 class AtualizarProdutoReq(BaseModel):
     status: Optional[str] = None
+    nome: Optional[str] = None
+    nicho: Optional[str] = None
     gancho: Optional[str] = None
     preco: Optional[str] = None
     comissao: Optional[str] = None
     link_afiliado: Optional[str] = None
+    link_vitrine: Optional[str] = None
+    data_postagem: Optional[str] = None
     prompt_criativo: Optional[str] = None
     observacoes: Optional[str] = None
 
@@ -79,6 +83,7 @@ class GerarPromptReq(BaseModel):
     plataforma: Optional[str] = "reels"
     uso_inusitado: Optional[str] = None
     estrategia: Optional[str] = "plot_twist"
+    loop_infinito: Optional[bool] = None
 
 class GerarLegendaReq(BaseModel):
     produto_id: str
@@ -90,6 +95,7 @@ class ExecutarPipelineReq(BaseModel):
     estilo: Optional[str] = "chocante"
     forcar: Optional[bool] = False
     usar_ganchos: Optional[bool] = True
+    loop_infinito: Optional[bool] = True
 
 
 # ─── Utilitários de Cache / Produtos ──────────────────────────────────────────
@@ -238,14 +244,22 @@ def atualizar_produto(produto_id: str, dados: AtualizarProdutoReq):
         
     if dados.status is not None:
         alvo.status = dados.status
+    if dados.nome is not None:
+        alvo.nome = dados.nome.strip()
+    if dados.nicho is not None:
+        alvo.nicho = dados.nicho.strip()
     if dados.gancho is not None:
         alvo.gancho = dados.gancho
     if dados.preco is not None:
-        alvo.preco = dados.preco
+        alvo.preco = normalizar_preco(dados.preco)
     if dados.comissao is not None:
-        alvo.comissao = dados.comissao
+        alvo.comissao = normalizar_preco(dados.comissao)
     if dados.link_afiliado is not None:
-        alvo.link_afiliado = dados.link_afiliado
+        alvo.link_afiliado = dados.link_afiliado.strip()
+    if dados.link_vitrine is not None:
+        alvo.link_vitrine = dados.link_vitrine.strip()
+    if dados.data_postagem is not None:
+        alvo.data_postagem = dados.data_postagem.strip()
     if dados.prompt_criativo is not None:
         alvo.prompt_criativo = dados.prompt_criativo
     if dados.observacoes is not None:
@@ -287,6 +301,11 @@ async def api_gerar_prompt(req: GerarPromptReq):
         
     loop = asyncio.get_event_loop()
     try:
+        loop_ativo = (
+            req.loop_infinito
+            if req.loop_infinito is not None
+            else ("short" in (req.plataforma or "").lower())
+        )
         partes = await loop.run_in_executor(
             executor,
             gerar_prompt_video,
@@ -295,7 +314,8 @@ async def api_gerar_prompt(req: GerarPromptReq):
             req.estilo or "chocante",
             None,
             req.uso_inusitado,
-            req.estrategia or "plot_twist"
+            req.estrategia or "plot_twist",
+            loop_ativo,
         )
         
         textos = [item.prompt_texto if hasattr(item, "prompt_texto") else str(item) for item in partes]
@@ -373,13 +393,21 @@ async def api_executar_pipeline(req: ExecutarPipelineReq):
 
     loop = asyncio.get_event_loop()
     try:
-        res = await loop.run_in_executor(
-            executor,
-            processar_produto,
+        import inspect
+        sig = inspect.signature(processar_produto)
+        args_pipeline = [
             p,
             req.forcar or False,
             req.estilo or "chocante",
             req.usar_ganchos if req.usar_ganchos is not None else True,
+        ]
+        if "loop_infinito" in sig.parameters:
+            args_pipeline.append(req.loop_infinito if req.loop_infinito is not None else True)
+
+        res = await loop.run_in_executor(
+            executor,
+            processar_produto,
+            *args_pipeline,
         )
         pacote_path = res.get("pacote")
         pacote_texto = ""
@@ -417,8 +445,12 @@ async def api_extrair_url(req: ExtrairUrlReq):
     loop = asyncio.get_event_loop()
     try:
         resultado = await loop.run_in_executor(executor, extrair_cadastro, url)
-        if not resultado:
-            raise HTTPException(status_code=422, detail="Não foi possível extrair dados desta URL")
+        if not resultado or (resultado.get("erro") and not resultado.get("nome")):
+            return {
+                "sucesso": False,
+                "erro": resultado.get("erro", "Não foi possível extrair dados desta URL"),
+                "dados": resultado or {}
+            }
         return {"sucesso": True, "dados": resultado}
     except Exception as e:
         logger.error(f"Erro ao extrair dados de URL: {e}")

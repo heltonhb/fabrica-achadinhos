@@ -142,6 +142,55 @@ class TestConstruirVitrineEndToEnd:
         assert "Item Sem Link" not in html_gerado
 
 
+class TestAnalyticsGoatCounter:
+    def test_codigo_padrao_quando_sem_env(self, monkeypatch):
+        monkeypatch.setattr(gerar_vitrine, "obter_segredo", lambda chave: "")
+        assert gerar_vitrine.codigo_goatcounter() == gerar_vitrine.GOATCOUNTER_PADRAO
+
+    def test_codigo_vem_do_env(self, monkeypatch):
+        monkeypatch.setenv("GOATCOUNTER_CODE", "outrosite")
+        assert gerar_vitrine.codigo_goatcounter() == "outrosite"
+
+    def test_codigo_de_desativacao_liga_rastreamento(self, monkeypatch):
+        for valor in ("off", "0", "nao", "-"):
+            monkeypatch.setenv("GOATCOUNTER_CODE", valor)
+            assert gerar_vitrine.codigo_goatcounter() == ""
+
+    def test_html_com_analytics_e_eventos(self, monkeypatch):
+        monkeypatch.setenv("GOATCOUNTER_CODE", "helton")
+        p = Produto(id="#20", nome="Tapete", link_afiliado="https://s.shopee.com.br/x")
+        html_gerado = gerar_vitrine.gerar_html_vitrine([p], {"#20": None})
+
+        assert "helton.goatcounter.com/count" in html_gerado
+        assert "gc.zgo.at/count.js" in html_gerado
+        # helper de eventos e rastreio de CTA/busca/filtro/in-app
+        assert "__rastrear" in html_gerado
+        assert "/cta/" in html_gerado
+        assert "sem-resultado" in html_gerado
+        assert "/filtro/" in html_gerado
+        assert "/inapp/visita-inapp" in html_gerado
+        # visita própria nunca é contada
+        assert "GC_EXCLUIDO" in html_gerado and "semanalytics" in html_gerado
+
+    def test_html_sem_analytics_quando_desativado(self, monkeypatch):
+        monkeypatch.setenv("GOATCOUNTER_CODE", "off")
+        p = Produto(id="#20", nome="Tapete", link_afiliado="https://s.shopee.com.br/x")
+        html_gerado = gerar_vitrine.gerar_html_vitrine([p], {"#20": None})
+
+        assert "goatcounter.com" not in html_gerado
+        assert "gc.zgo.at" not in html_gerado
+        assert "window.GC_EXCLUIDO = true" in html_gerado
+
+    def test_codigo_com_caracteres_perigosos_e_escapado(self, monkeypatch):
+        monkeypatch.setenv("GOATCOUNTER_CODE", 'abc\"><script>alert(1)</script>')
+        p = Produto(id="#01", nome="Item", link_afiliado="https://s.shopee.com.br/x")
+        html_gerado = gerar_vitrine.gerar_html_vitrine([p], {"#01": None})
+        # o atributo data-goatcounter recebe o code escapado (sem quebrar o HTML)
+        assert "data-goatcounter" in html_gerado
+        assert "abc&quot;" in html_gerado
+        assert "<script>alert(1)</script>" not in html_gerado
+
+
 class TestProdutoDoMomentoEHero:
     def test_selecionar_produto_postado_mais_recente(self):
         p1 = Produto(id="#01", nome="Item 1", status="Ideia", link_afiliado="https://shopee/1")
@@ -152,6 +201,24 @@ class TestProdutoDoMomentoEHero:
         selecionado = gerar_vitrine.selecionar_produto_do_momento([p1, p2, p3, p4])
         assert selecionado is not None
         assert selecionado.id == "#03"
+
+    def test_maior_id_postado_vence_mesmo_com_linhas_fora_de_ordem(self):
+        # Planilha desordenada: o postado mais recente (#20) não é a última linha
+        p15 = Produto(id="#15", nome="Item 15", status="Postado", link_afiliado="https://shopee/15")
+        p20 = Produto(id="#20", nome="Item 20", status="Postado", link_afiliado="https://shopee/20")
+        p16 = Produto(id="#16", nome="Item 16", status="Editado", link_afiliado="https://shopee/16")
+
+        selecionado = gerar_vitrine.selecionar_produto_do_momento([p20, p16, p15])
+        assert selecionado is not None
+        assert selecionado.id == "#20"
+
+    def test_status_postado_com_espacos_e_maiusculas_conta(self):
+        p = Produto(id="#09", nome="Item 9", status="  POSTADO ", link_afiliado="https://shopee/9")
+        outro = Produto(id="#12", nome="Item 12", status="Ideia", link_afiliado="https://shopee/12")
+
+        selecionado = gerar_vitrine.selecionar_produto_do_momento([outro, p])
+        assert selecionado is not None
+        assert selecionado.id == "#09"
 
     def test_selecionar_fallback_quando_nenhum_postado(self):
         p1 = Produto(id="#01", nome="Item 1", status="Ideia", link_afiliado="https://shopee/1")
