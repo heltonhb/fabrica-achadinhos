@@ -78,7 +78,7 @@ Saídas:
 Bot que responde comentários com o link afiliado:
 
 ```bash
-python webhook_insta.py   # http://localhost:8000/webhook
+python webhook_insta.py   # http://localhost:8001/webhook
 ```
 
 Configure no `.env`:
@@ -156,5 +156,6 @@ Observações:
   a cada redeploy — a planilha é a fonte de verdade e os arquivos regeneram.
 - Sem `GOOGLE_TOKEN_JSON` o app sobe em modo leitura (a leitura da planilha é
   pública via export CSV).
-- `webhook_insta.py` (porta 8000) é outro serviço: publicação automática no
+- `webhook_insta.py` (porta 8001, configurável via `WEBHOOK_PORT`) é outro
+  serviço: publicação automática no
   Instagram exige um host separado com URL pública (VPS/Render).

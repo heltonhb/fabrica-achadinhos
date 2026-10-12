@@ -54,11 +54,11 @@ Como o painel do Streamlit e o Bot são aplicações diferentes, eles rodam em p
    ```bash
    python webhook_insta.py
    ```
-   *O bot ficará rodando no endereço `http://localhost:8000`.*
+   *O bot ficará rodando no endereço `http://localhost:8001`.*
 3. **Exponha o bot para a Internet (com ngrok):**
    A Meta precisa de um link público (HTTPS) para enviar os avisos. Abra um terceiro terminal e rode:
    ```bash
-   ngrok http 8000
+   ngrok http 8001
    ```
    *Copie a URL HTTPS gerada pelo ngrok (ex: `https://abcd-123.ngrok-free.app`).*
 

@@ -255,5 +255,6 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
 if __name__ == "__main__":
     import uvicorn
-    # Para rodar: python webhook_insta.py
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Para rodar: python webhook_insta.py (porta 8001 p/ não colidir com o Stitch em 8000)
+    porta = int(obter_segredo("WEBHOOK_PORT") or "8001")
+    uvicorn.run(app, host="0.0.0.0", port=porta)
