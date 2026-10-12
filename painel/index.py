@@ -53,7 +53,7 @@ _IDS_CACHE: tuple[float, list[str]] | None = None
 @app.get("/", include_in_schema=False)
 def pagina() -> FileResponse:
     """Serve o mini-app (a Vercel roteia tudo pra cá com o preset FastAPI)."""
-    return FileResponse(_PAGINA)
+    return FileResponse(_PAGINA, headers={"Cache-Control": "no-cache"})
 
 
 def _pin_configurado() -> str:
