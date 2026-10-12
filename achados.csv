@@ -1243,4 +1243,59 @@ A persistent badge ""ACHADINHO"" is fixed at the top center of the screen throug
 - **Voiceover (Max 8 words)**: ""Vai pro perfil e procura o 26. É esse aqui."" *(10 words adjusted to exact required phrase)*
 - **On-Screen Text**: **Achadinho** **26** (Yellow bold ""26"").
 - **Audio**: Music cuts abruptly and cleanly on the final syllable of ""aqui"". Zero trailing silence.",,,,,,
-#27,Roteiro Pronto,,"Toalha de Banho Microfibra Coral 70x140cm, Alta Absorção, Toque Macio e Secagem Rápida",Banheiros,"29,00",,https://s.shopee.com.br/8fT3E67szw?share_channel_code=1,,,Isso aqui seca o corpo inteiro.,Nao,,,,,,,
+#27,Editado,,"Toalha de Banho Microfibra Coral 70x140cm, Alta Absorção, Toque Macio e Secagem Rápida",Banheiros,"29,00",,https://s.shopee.com.br/8fT3E67szw?share_channel_code=1,,,Isso aqui seca o corpo inteiro.,Nao,"Vertical 9:16 format, 1080×1920 resolution. Light background music playing at a low volume, not overpowering the voiceover. A fixed badge with the text ""ACHADINHO"" is placed at the top center in every shot. Fast-paced instructional marketplace video about a microfiber coral bath towel (70x140cm), shot in a bright, clean bathroom.
+
+[0:00–0:02] 
+- Visual: Camera starts already in motion, tracking a hand swiftly wrapping the super-soft coral microfiber towel around a wet arm, showing immediate water absorption. No static opening.
+- Voiceover (Brazilian Portuguese, informal, max 6 words): ""Isso aqui seca o corpo inteiro.""
+- On-screen text: **Seca** muito
+
+[0:02–0:07] 
+- Visual: Close-up shot showing the texture of the fabric up close as it glides smoothly over wet skin, demonstrating the high absorption and fast-drying material in real-time.
+- Voiceover (Brazilian Portuguese, informal, max 16 words): ""A microfibra coral puxa toda a água num segundo e não fica pesada nem encharcada.""
+- On-screen text: Não **pesa**
+
+[0:07–0:08] 
+- Visual: Sudden, hard punch-in extreme close-up on the soft coral fibers of the towel. Zero camera movement during this 1-second beat.
+- Voiceover: [Silence, zero words]
+- On-screen text: **Olha** isso
+
+[0:08–0:10] 
+- Visual: Hand folding the compact towel effortlessly, showing how little space it takes up compared to a traditional bulky cotton towel.
+- Voiceover (Brazilian Portuguese, informal, max 10 words): ""E o melhor é que ela cabe em qualquer cantinho.""
+- On-screen text: Super **compacta**
+
+---
+
+```text
+VIDEO GENERATION PROMPT (PART 2 / 10-20 SECONDS)
+
+TECHNICAL SPECIFICATIONS:
+- Format: Vertical 9:16, 1080×1920
+- Style: Educational / Helpful tip, calm tone, clear language, no hyperbole
+- Persistent Element: Badge ""ACHADINHO"" fixed at the top center in every shot, identical size and position.
+- Lighting: Bright, clean bathroom lighting, warm natural tones.
+- Seamless Loop: The final frame of this video (at 0:20) must snap back to perfectly match the exact framing, hand position, and lighting of the first frame of Part 1.
+
+SCENE-BY-SCENE BREAKDOWN (TIMED):
+
+0:10 - 0:11 | Continuation (Visual only)
+- VISUAL: A close-up shot of the blue microfiber towel being gently folded or wrung out, showing how thin yet absorbent the Coral fabric is. No hands shaking wildly, smooth motion.
+- AUDIO: Zero voiceover. Ambient bathroom sound only. Light background music continues softly.
+- ON-SCREEN TEXT: ""Toque **macio**""
+
+0:11 - 0:16 | Creative / Unusual Use (Plot Twist)
+- VISUAL: The person uses the same towel to effortlessly dry off a wet, dripping pet dog (golden retriever puppy) sitting on a stool. The towel absorbs the water instantly without dripping everywhere.
+- AUDIO (Voiceover in Brazilian Portuguese): ""E o melhor é que ela não solta fiapo e serve perfeitamente para secar o pet rapidinho."" (18 words)
+- ON-SCREEN TEXT: ""Seca o **pet**""
+
+0:16 - 0:18 | Price Reveal
+- VISUAL: Cut to the towel folded neatly on a wooden bathroom shelf next to a small plant. A clean graphic of the price appears on screen.
+- AUDIO (Voiceover in Brazilian Portuguese): ""Tudo isso por vinte e nove reais."" (8 words)
+- ON-SCREEN TEXT: ""Apenas **29,00**""
+
+0:18 - 0:20 | Call to Action & Seamless Loop Setup
+- VISUAL: A hand reaches in and picks up the towel from the shelf, mirroring the exact starting hand position and camera angle of Part 1, creating a seamless visual loop. An animated bright yellow arrow points downwards.
+- AUDIO (Voiceover in Brazilian Portuguese): ""Vai pro perfil e procura o 27. É esse aqui."" (8 words, spoken at a moderate pace, pausing slightly before ""27""). Audio cuts completely clean on the final syllable of ""aqui"", zero trailing silence.
+- ON-SCREEN TEXT: ""Achadinho **27**""
+```",,,,,,
