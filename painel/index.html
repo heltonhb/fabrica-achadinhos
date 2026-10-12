@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0A0D14">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Painel — Fábrica de Achadinhos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FFD600;
+            --shopee: #EE4D2D;
+            --cyan: #38BDF8;
+            --bg: #0A0D14;
+            --surface: #131722;
+            --card: #181D2B;
+            --card-hi: #22293C;
+            --text: #FFFFFF;
+            --muted: #94A3B8;
+            --border: rgba(255, 255, 255, 0.08);
+            --radius: 14px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html { -webkit-text-size-adjust: 100%; }
+        body {
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100dvh;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+        .wrap { max-width: 640px; margin: 0 auto; padding: 16px 14px 40px; }
+
+        /* ── Login ── */
+        .login { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+        .login-card { width: 100%; max-width: 340px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 28px 22px; text-align: center; }
+        .login-card .logo { font-size: 15px; font-weight: 800; color: var(--primary); letter-spacing: .5px; margin-bottom: 6px; }
+        .login-card h1 { font-size: 19px; margin-bottom: 4px; }
+        .login-card p { font-size: 12.5px; color: var(--muted); margin-bottom: 18px; }
+        .login input {
+            width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text); font-size: 20px; font-weight: 700; text-align: center;
+            letter-spacing: 8px; outline: none; margin-bottom: 12px; font-family: inherit;
+        }
+        .login input:focus { border-color: var(--primary); }
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            border: none; border-radius: 12px; padding: 12px 18px; font-family: inherit;
+            font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity .15s;
+        }
+        .btn:active { opacity: .75; }
+        .btn-primary { background: var(--primary); color: #0A0D14; width: 100%; }
+        .btn-ghost { background: var(--card-hi); color: var(--text); }
+        .login-erro { color: var(--shopee); font-size: 12.5px; font-weight: 600; margin-top: 10px; min-height: 16px; }
+
+        /* ── Header ── */
+        header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+        .titulo { display: flex; align-items: center; gap: 10px; }
+        .titulo .badge { width: 38px; height: 38px; border-radius: 12px; background: rgba(255, 214, 0, .12); border: 1px solid rgba(255, 214, 0, .3); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .titulo h1 { font-size: 16px; font-weight: 800; }
+        .titulo .sub { font-size: 11px; color: var(--muted); font-weight: 500; }
+        .periodo { display: flex; gap: 6px; }
+        .periodo button {
+            padding: 7px 12px; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer;
+            background: var(--card); color: var(--muted); border: 1px solid var(--border); font-family: inherit;
+        }
+        .periodo button.ativo { background: var(--primary); color: #0A0D14; border-color: var(--primary); }
+
+        /* ── Cards / KPIs ── */
+        .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 9px; }
+        .kpi { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+        .kpi .label { font-size: 9.5px; font-weight: 800; text-transform: uppercase; color: var(--muted); letter-spacing: .4px; }
+        .kpi .valor { font-size: 25px; font-weight: 800; margin-top: 2px; }
+        .kpi.secundaria { padding: 10px 12px; background: rgba(24, 29, 43, .6); }
+        .kpi.secundaria .valor { font-size: 17px; }
+        .amarelo { color: var(--primary); }
+        .laranja { color: var(--shopee); }
+        .ciano { color: var(--cyan); }
+
+        /* ── Seções ── */
+        .secao { margin-top: 16px; }
+        .secao > .rotulo { font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 5px; margin-bottom: 7px; }
+        .secao > .rotulo .ic { color: var(--primary); }
+        .painel-box { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+
+        /* Gráfico */
+        .grafico-barras { display: flex; align-items: flex-end; gap: 2px; height: 92px; }
+        .grafico-barras .barra { flex: 1; background: rgba(255, 214, 0, .65); border-radius: 4px 4px 0 0; min-height: 2px; }
+        .grafico-barras .barra:hover, .grafico-barras .barra:active { background: var(--primary); }
+        .grafico-eixos { display: flex; justify-content: space-between; margin-top: 5px; font-size: 9.5px; color: var(--muted); font-family: ui-monospace, monospace; }
+
+        /* Chips */
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .chip { padding: 6px 11px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); font-size: 11.5px; font-weight: 500; }
+        .chip b { color: var(--primary); font-family: ui-monospace, monospace; }
+
+        /* Tabelas */
+        .tabela-box { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        thead { background: var(--card); color: var(--muted); }
+        th { padding: 9px 12px; text-align: left; font-weight: 700; }
+        th.dir, td.dir { text-align: right; }
+        tbody td { padding: 8px 12px; border-top: 1px solid rgba(255, 255, 255, .05); }
+        .mono { font-family: ui-monospace, monospace; }
+        .vazio { font-size: 12px; color: var(--muted); padding: 8px 2px; }
+
+        /* Público */
+        .publico-grid { display: grid; grid-template-columns: 1fr; gap: 9px; }
+        .publico-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+        .publico-card .titulo-q { font-size: 9.5px; font-weight: 800; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; letter-spacing: .4px; }
+        .publico-linha { margin-bottom: 7px; }
+        .publico-linha .topo { display: flex; justify-content: space-between; font-size: 11.5px; gap: 8px; }
+        .publico-linha .topo .n { color: var(--muted); font-family: ui-monospace, monospace; white-space: nowrap; }
+        .publico-linha .trilho { height: 4px; border-radius: 999px; background: var(--card-hi); overflow: hidden; margin-top: 3px; }
+        .publico-linha .trilho > div { height: 100%; border-radius: 999px; background: rgba(56, 189, 248, .7); }
+
+        /* Estados */
+        .carregando { text-align: center; padding: 44px 0; color: var(--muted); font-size: 13px; }
+        .carregando .spin { display: inline-block; width: 26px; height: 26px; border: 3px solid var(--card-hi); border-top-color: var(--primary); border-radius: 50%; animation: girar .8s linear infinite; margin-bottom: 10px; }
+        @keyframes girar { to { transform: rotate(360deg); } }
+        .erro-box { text-align: center; padding: 34px 12px; }
+        .erro-box .ic { font-size: 26px; margin-bottom: 8px; }
+        .erro-box p { font-size: 13px; margin-bottom: 14px; }
+
+        footer { margin-top: 26px; font-size: 10.5px; color: var(--muted); line-height: 1.5; }
+        .infra { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 11px; color: var(--muted); }
+        .infra button { background: none; border: none; color: var(--primary); font-weight: 700; font-size: 11.5px; cursor: pointer; font-family: inherit; padding: 4px; }
+        @media (min-width: 560px) {
+            .kpis { grid-template-columns: repeat(4, 1fr); }
+            .publico-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ══════════ TELA DE LOGIN ══════════ -->
+<div id="tela-login" class="login" hidden>
+    <div class="login-card">
+        <div class="logo">🛍️ FÁBRICA DE ACHADINHOS</div>
+        <h1>Painel da Vitrine</h1>
+        <p>Digite o PIN de acesso</p>
+        <form id="form-pin">
+            <input id="input-pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="••••">
+            <button type="submit" class="btn btn-primary">Entrar</button>
+        </form>
+        <div id="login-erro" class="login-erro"></div>
+    </div>
+</div>
+
+<!-- ══════════ PAINEL ══════════ -->
+<div id="tela-painel" class="wrap" hidden>
+    <header>
+        <div class="titulo">
+            <div class="badge">📊</div>
+            <div>
+                <h1>Métricas da Vitrine</h1>
+                <div class="sub" id="sub-periodo">GoatCounter</div>
+            </div>
+        </div>
+        <div class="periodo" id="botoes-periodo">
+            <button data-dias="7">7d</button>
+            <button data-dias="30" class="ativo">30d</button>
+            <button data-dias="90">90d</button>
+        </div>
+    </header>
+
+    <div id="estado-carregando" class="carregando" hidden>
+        <div class="spin"></div>
+        <div>Carregando métricas…</div>
+    </div>
+
+    <div id="estado-erro" class="erro-box" hidden>
+        <div class="ic">⚠️</div>
+        <p id="erro-msg"></p>
+        <button class="btn btn-ghost" onclick="carregar()">Tentar de novo</button>
+    </div>
+
+    <div id="conteudo" hidden>
+        <div class="kpis">
+            <div class="kpi"><div class="label">Visitas</div><div class="valor" id="kpi-visitas">—</div></div>
+            <div class="kpi"><div class="label">Cliques Shopee</div><div class="valor laranja" id="kpi-cliques">—</div></div>
+            <div class="kpi"><div class="label">CTR</div><div class="valor amarelo" id="kpi-ctr">—</div></div>
+            <div class="kpi"><div class="label">In-app (IG)</div><div class="valor" id="kpi-inapp">—</div></div>
+        </div>
+        <div class="kpis">
+            <div class="kpi secundaria"><div class="label">Média / dia</div><div class="valor" id="kpi-media">—</div></div>
+            <div class="kpi secundaria"><div class="label">Melhor dia</div><div class="valor" id="kpi-melhor">—</div></div>
+            <div class="kpi secundaria"><div class="label">Buscas ok / sem res.</div><div class="valor" id="kpi-buscas">—</div></div>
+            <div class="kpi secundaria"><div class="label">Eventos no período</div><div class="valor" id="kpi-eventos">—</div></div>
+        </div>
+
+        <div class="secao" id="sec-grafico" hidden>
+            <div class="rotulo"><span class="ic">📊</span> Visitas por dia</div>
+            <div class="painel-box">
+                <div class="grafico-barras" id="grafico"></div>
+                <div class="grafico-eixos"><span id="grafico-inicio"></span><span id="grafico-fim"></span></div>
+            </div>
+        </div>
+
+        <div class="secao" id="sec-publico" hidden>
+            <div class="rotulo"><span class="ic">👥</span> Perfil do público</div>
+            <div class="publico-grid" id="publico"></div>
+        </div>
+
+        <div class="secao" id="sec-filtros" hidden>
+            <div class="rotulo"><span class="ic">🏷️</span> Nichos mais filtrados</div>
+            <div class="chips" id="filtros"></div>
+        </div>
+
+        <div class="secao" id="sec-produtos">
+            <div class="rotulo"><span class="ic">🏆</span> Produtos mais clicados</div>
+            <div class="tabela-box">
+                <table>
+                    <thead><tr><th>Produto</th><th>Posição</th><th class="dir">Cliques</th></tr></thead>
+                    <tbody id="tbody-produtos"></tbody>
+                </table>
+            </div>
+            <div id="produtos-vazio" class="vazio" hidden>Nenhum clique no botão da Shopee no período.</div>
+        </div>
+
+        <div class="secao" id="sec-buscas" hidden>
+            <div class="rotulo"><span class="ic">🔍</span> Buscas sem resultado</div>
+            <div class="tabela-box">
+                <table>
+                    <thead><tr><th>O que buscaram</th><th class="dir">Vezes</th></tr></thead>
+                    <tbody id="tbody-buscas"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="secao" id="sec-origem" hidden>
+            <div class="rotulo"><span class="ic">🌐</span> De onde vem o tráfego</div>
+            <div class="tabela-box">
+                <table>
+                    <thead><tr><th>Origem</th><th class="dir">Visitas</th></tr></thead>
+                    <tbody id="tbody-origem"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <footer>
+            <div class="infra">
+                <span id="rodape-info"></span>
+                <button onclick="sair()">Sair</button>
+            </div>
+            Fonte: GoatCounter · atualiza a cada 60s · use <b>?semanalytics</b> na URL da vitrine pra não contabilizar suas próprias visitas.
+        </footer>
+    </div>
+</div>
+
+<script>
+'use strict';
+    const API = '/api';
+    let pin = localStorage.getItem('painel_pin') || '';
+    let dias = parseInt(localStorage.getItem('painel_dias') || '30', 10);
+    let atualizando = false;
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    function formatarDiaCurto(iso) {
+        const [, mes, dia] = String(iso || '').split('-');
+        return dia && mes ? dia + '/' + mes : iso;
+    }
+
+    function cabecalho(extra = {}) {
+        return Object.assign({ 'x-pin': pin }, extra);
+    }
+
+    async function checarPin() {
+        if (!pin) return false;
+        try {
+            const res = await fetch(API + '/checar-pin', { headers: cabecalho() });
+            if (!res.ok) return false;
+            const data = await res.json();
+            return !!data.ok;
+        } catch { return false; }
+    }
+
+    function mostrarLogin(erro) {
+        $('tela-login').hidden = false;
+        $('tela-painel').hidden = true;
+        $('login-erro').textContent = erro || '';
+        setTimeout(() => $('input-pin').focus(), 80);
+    }
+
+    function mostrarPainel() {
+        $('tela-login').hidden = true;
+        $('tela-painel').hidden = false;
+    }
+
+    $('form-pin').addEventListener('submit', async e => {
+        e.preventDefault();
+        const valor = $('input-pin').value.trim();
+        if (!valor) return;
+        pin = valor;
+        if (await checarPin()) {
+            localStorage.setItem('painel_pin', pin);
+            mostrarPainel();
+            carregar();
+        } else {
+            pin = localStorage.getItem('painel_pin') || '';
+            $('login-erro').textContent = 'PIN incorreto. Tente de novo.';
+            $('input-pin').value = '';
+        }
+    });
+
+    function sair() {
+        pin = '';
+        localStorage.removeItem('painel_pin');
+        mostrarLogin();
+    }
+
+    $('botoes-periodo').addEventListener('click', e => {
+        const btn = e.target.closest('button[data-dias]');
+        if (!btn) return;
+        dias = parseInt(btn.dataset.dias, 10);
+        localStorage.setItem('painel_dias', String(dias));
+        [...$('botoes-periodo').children].forEach(b => b.classList.toggle('ativo', b === btn));
+        carregar();
+    });
+
+    function estados(qual) {
+        $('estado-carregando').hidden = qual !== 'carregando';
+        $('estado-erro').hidden = qual !== 'erro';
+        $('conteudo').hidden = qual !== 'ok';
+    }
+
+    function falhar(msg, forcarLogin) {
+        if (forcarLogin) { sair(); $('login-erro').textContent = 'Sessão expirada — digite o PIN de novo.'; return; }
+        $('erro-msg').textContent = msg;
+        estados('erro');
+    }
+
+    async function carregar() {
+        if (atualizando) return;
+        atualizando = true;
+        estados('carregando');
+        try {
+            const res = await fetch(API + '/metricas?dias=' + dias, { headers: cabecalho() });
+            if (res.status === 401) { falhar('', true); return; }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.sucesso) { falhar(data.detail || 'Erro ao carregar métricas'); return; }
+            render(data.metricas);
+            estados('ok');
+        } catch {
+            falhar('Falha na conexão. Verifique sua internet.');
+        } finally {
+            atualizando = false;
+        }
+    }
+
+    function render(m) {
+        $('sub-periodo').textContent = 'GoatCounter · ' + (m.periodo?.inicio || '') + ' a ' + (m.periodo?.fim || '');
+        $('kpi-visitas').textContent = m.visitantes ?? 0;
+        $('kpi-cliques').textContent = m.cliques_cta ?? 0;
+        $('kpi-ctr').textContent = (m.ctr_pct ?? 0) + '%';
+        $('kpi-inapp').textContent = m.visitas_inapp ?? 0;
+        $('kpi-media').textContent = m.media_diaria ?? 0;
+        $('kpi-melhor').textContent = m.melhor_dia
+            ? formatarDiaCurto(m.melhor_dia.dia) + ' (' + m.melhor_dia.visitas + ')' : '—';
+        $('kpi-buscas').innerHTML = (m.buscas_ok ?? 0) + ' <span style="color:var(--muted)">/</span> <span class="amarelo">' + (m.buscas_sem_resultado ?? 0) + '</span>';
+        $('kpi-eventos').textContent = m.eventos_total_periodo ?? 0;
+
+        // Gráfico de visitas por dia
+        const serie = m.serie_diaria || [];
+        $('sec-grafico').hidden = !serie.length;
+        if (serie.length) {
+            const max = Math.max(0, ...serie.map(d => d.visitas));
+            $('grafico').innerHTML = serie.map(d =>
+                '<div class="barra" style="height:' + (max ? Math.max(2, 100 * d.visitas / max) : 2) + '%" title="' +
+                esc(formatarDiaCurto(d.dia)) + ': ' + d.visitas + ' visita(s)"></div>').join('');
+            $('grafico-inicio').textContent = formatarDiaCurto(serie[0].dia);
+            $('grafico-fim').textContent = formatarDiaCurto(serie[serie.length - 1].dia);
+        }
+
+        // Perfil do público
+        const quebras = [
+            { titulo: 'Dispositivo', itens: m.dispositivos || [] },
+            { titulo: 'Sistema', itens: m.sistemas || [] },
+            { titulo: 'Navegador', itens: m.navegadores || [] },
+            { titulo: 'País', itens: m.paises || [] },
+            { titulo: 'Campanhas (utm)', itens: m.campanhas || [] },
+        ].filter(q => q.itens.length);
+        $('sec-publico').hidden = !quebras.length;
+        $('publico').innerHTML = quebras.map(q =>
+            '<div class="publico-card"><div class="titulo-q">' + esc(q.titulo) + '</div>' +
+            q.itens.slice(0, 5).map(it =>
+                '<div class="publico-linha"><div class="topo"><span>' + esc(it.nome) +
+                '</span><span class="n">' + it.visitas + ' · ' + it.pct + '%</span></div>' +
+                '<div class="trilho"><div style="width:' + it.pct + '%"></div></div></div>').join('') +
+            '</div>').join('');
+
+        // Filtros de nicho
+        const filtros = m.filtros || [];
+        $('sec-filtros').hidden = !filtros.length;
+        $('filtros').innerHTML = filtros.slice(0, 12).map(f =>
+            '<span class="chip">' + esc(f.nicho) + ' <b>' + f.cliques + '</b></span>').join('');
+
+        // Produtos mais clicados
+        const prods = m.produtos_clicados || [];
+        $('produtos-vazio').hidden = prods.length > 0;
+        $('sec-produtos').querySelector('.tabela-box').hidden = !prods.length;
+        $('tbody-produtos').innerHTML = prods.slice(0, 10).map(p =>
+            '<tr><td class="mono" style="font-weight:800">#' + esc(p.id) +
+            (p.na_lista === false ? ' <span style="font-family:sans-serif;font-size:10px;color:var(--muted)">⚠ removido</span>' : '') +
+            '</td><td style="color:var(--muted)">' + esc(p.posicao) +
+            '</td><td class="dir laranja" style="font-weight:800">' + p.cliques + '</td></tr>').join('');
+
+        // Buscas sem resultado
+        const buscas = m.buscas_falhas || [];
+        $('sec-buscas').hidden = !buscas.length;
+        $('tbody-buscas').innerHTML = buscas.slice(0, 10).map(b =>
+            '<tr><td>' + esc(b.termo) + '</td><td class="dir amarelo" style="font-weight:800">' + b.buscas + '</td></tr>').join('');
+
+        // Origem do tráfego
+        const refs = m.referrers || [];
+        const direto = m.acesso_direto || 0;
+        $('sec-origem').hidden = !refs.length && !direto;
+        $('tbody-origem').innerHTML =
+            (direto ? '<tr><td style="color:var(--muted);font-style:italic">Acesso direto / link sem origem (bio no app)</td><td class="dir" style="font-weight:800">' + direto + '</td></tr>' : '') +
+            refs.slice(0, 8).map(r =>
+                '<tr><td style="max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.url || '(acesso direto)') +
+                '</td><td class="dir" style="font-weight:800">' + r.visitas + '</td></tr>').join('');
+
+        $('rodape-info').textContent = 'atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + (m.cache ? ' · cache' : '');
+    }
+
+    // Auto-refresh a cada 60s (só com a aba visível)
+    setInterval(() => { if (document.visibilityState === 'visible' && !$('tela-painel').hidden) carregar(); }, 60000);
+
+    // Boot
+    (async () => {
+        [...$('botoes-periodo').children].forEach(b => b.classList.toggle('ativo', parseInt(b.dataset.dias, 10) === dias));
+        if (await checarPin()) { mostrarPainel(); carregar(); }
+        else mostrarLogin(localStorage.getItem('painel_pin') ? 'Sessão expirada — digite o PIN de novo.' : '');
+    })();
+</script>
+</body>
+</html>
