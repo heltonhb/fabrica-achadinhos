@@ -273,13 +273,19 @@
     }
 
     async function checarPin() {
-        if (!pin) return false;
+        if (!pin) return { ok: false, status: 0 };
         try {
             const res = await fetch(API + '/checar-pin', { headers: cabecalho() });
-            if (!res.ok) return false;
-            const data = await res.json();
-            return !!data.ok;
-        } catch { return false; }
+            if (!res.ok && res.status !== 401) return { ok: false, status: res.status };
+            const data = await res.json().catch(() => ({}));
+            return { ok: !!data.ok, status: res.status };
+        } catch { return { ok: false, status: 0 }; }
+    }
+
+    function mensagemLogin(resultado) {
+        if (resultado.status === 503) return 'Painel não configurado no servidor — defina PAINEL_PIN na Vercel e faça redeploy.';
+        if (resultado.status === 0) return 'Falha de conexão com o servidor.';
+        return 'PIN incorreto. Tente de novo.';
     }
 
     function mostrarLogin(erro) {
@@ -299,13 +305,14 @@
         const valor = $('input-pin').value.trim();
         if (!valor) return;
         pin = valor;
-        if (await checarPin()) {
+        const resultado = await checarPin();
+        if (resultado.ok) {
             localStorage.setItem('painel_pin', pin);
             mostrarPainel();
             carregar();
         } else {
             pin = localStorage.getItem('painel_pin') || '';
-            $('login-erro').textContent = 'PIN incorreto. Tente de novo.';
+            $('login-erro').textContent = mensagemLogin(resultado);
             $('input-pin').value = '';
         }
     });
@@ -437,8 +444,9 @@
     // Boot
     (async () => {
         [...$('botoes-periodo').children].forEach(b => b.classList.toggle('ativo', parseInt(b.dataset.dias, 10) === dias));
-        if (await checarPin()) { mostrarPainel(); carregar(); }
-        else mostrarLogin(localStorage.getItem('painel_pin') ? 'Sessão expirada — digite o PIN de novo.' : '');
+        const resultado = await checarPin();
+        if (resultado.ok) { mostrarPainel(); carregar(); }
+        else mostrarLogin(mensagemLogin(resultado));
     })();
 </script>
 </body>

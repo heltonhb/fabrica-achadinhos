@@ -1,7 +1,7 @@
 """
 tests/test_painel.py — Mini-app de métricas (painel/api/index.py).
 
-Carrega o módulo da função Vercel por caminho de arquivo (não é pacote
+Carrega o módulo do entrypoint Vercel por caminho de arquivo (não é pacote
 importável) e valida o gate de PIN e o contrato /api/metricas, que deve
 espelhar o endpoint do app Stitch ({sucesso, metricas}).
 """
@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 _RAIZ = Path(__file__).resolve().parents[1]
-_MODULO = _RAIZ / "painel" / "api" / "index.py"
+_MODULO = _RAIZ / "painel" / "index.py"
 
 METRICAS_FALSA = {
     "visitantes": 120,
@@ -42,7 +42,7 @@ def _carregar_modulo(monkeypatch: pytest.MonkeyPatch, pin: str | None = "1234"):
         monkeypatch.setenv("PAINEL_PIN", pin)
     monkeypatch.delenv("GOOGLE_SHEETS_ID", raising=False)
 
-    nome = f"painel_api_index_{id(monkeypatch)}"
+    nome = f"painel_index_{id(monkeypatch)}"
     spec = importlib.util.spec_from_file_location(nome, _MODULO)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -60,6 +60,15 @@ def test_sem_pin_configurado_retorna_503(monkeypatch):
     res = client.get("/api/metricas")
     assert res.status_code == 503
     assert "PAINEL_PIN" in res.json()["detail"]
+
+
+def test_raiz_serve_o_mini_app(monkeypatch):
+    mod = _carregar_modulo(monkeypatch, pin="1234")
+    client = TestClient(mod.app)
+    res = client.get("/")
+    assert res.status_code == 200
+    assert "text/html" in res.headers["content-type"]
+    assert "Painel" in res.text
 
 
 def test_pin_errado_retorna_401(monkeypatch):

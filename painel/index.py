@@ -1,9 +1,12 @@
 """
-painel/api/index.py — Mini-app de métricas da vitrine (GoatCounter) pra celular.
+painel/index.py — Mini-app de métricas da vitrine (GoatCounter) pra celular.
 
 Projeto Vercel SEPARADO (Settings → Root Directory: `painel`). O build copia
-`../analytics.py` e `../config.py` para `api/` (ver `painel/vercel.json`), então
-o backend é exatamente o mesmo módulo usado pelo app Stitch — zero duplicação.
+`../analytics.py` e `../config.py` para a raiz do projeto (ver painel/vercel.json),
+então o backend é exatamente o mesmo módulo usado pelo app Stitch — zero duplicação.
+
+A Vercel detecta o FastAPI pelo requirements.txt e roteia TODAS as requisições
+pra este entrypoint (raiz), que serve a página em GET / e a API em /api/*.
 
 Variáveis de ambiente (Vercel → Settings → Environment Variables):
   PAINEL_PIN             obrigatório — PIN de acesso ao painel (ex.: 6 dígitos)
@@ -27,11 +30,12 @@ from pathlib import Path
 
 import requests
 from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse
 
-# Localmente (pytest / uvicorn na raiz do repo) analytics.py está na raiz;
-# na Vercel ele é copiado para api/ no build. Diretório inexistente no
-# sys.path é inofensivo — o Python tenta as demais entradas.
-_RAIZ = Path(__file__).resolve().parents[2]
+# Localmente (pytest / uvicorn) analytics.py está na raiz do repo; na Vercel
+# ele é copiado para painel/ no build. Diretório inexistente no sys.path é
+# inofensivo — o Python tenta as demais entradas.
+_RAIZ = Path(__file__).resolve().parents[1]
 if str(_RAIZ) not in sys.path:
     sys.path.insert(0, str(_RAIZ))
 
@@ -42,7 +46,14 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Painel da Vitrine")
 
+_PAGINA = Path(__file__).resolve().parent / "public" / "index.html"
 _IDS_CACHE: tuple[float, list[str]] | None = None
+
+
+@app.get("/", include_in_schema=False)
+def pagina() -> FileResponse:
+    """Serve o mini-app (a Vercel roteia tudo pra cá com o preset FastAPI)."""
+    return FileResponse(_PAGINA)
 
 
 def _pin_configurado() -> str:

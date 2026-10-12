@@ -1,4 +1,4 @@
 .vercel
 __pycache__/
-api/analytics.py
-api/config.py
+analytics.py
+config.py

@@ -1,4 +1,3 @@
 {
-  "buildCommand": "cp ../analytics.py ../config.py api/",
-  "framework": null
+  "buildCommand": "cp ../analytics.py ../config.py ."
 }
