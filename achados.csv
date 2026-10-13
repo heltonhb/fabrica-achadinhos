@@ -1180,7 +1180,7 @@ Vertical format 9:16, 1080×1920. High-end lifestyle aesthetics, warm natural li
 - **Voiceover (Brazilian Portuguese):** ""Vai pro perfil e procura o 25. É esse aqui."" (8 words — spoken deliberately slow on the number)
 - **On-Screen Text:** Achadinho **25**
 - **Audio:** Audio cuts instantly clean on the final syllable of ""aqui"", absolutely zero trailing silence or fade-out.",,,,,,
-#26,Editado,,Massageador elétrico portátil pescoço calmante intensidade de 3 velocidades + aquecimento infravermelho,Cuidados Pessoais,"76,99",,https://s.shopee.com.br/3LRWsN8ZUc?share_channel_code=1,,,Não acredito que demorei tanto pra descobrir esse Massageador elétrico portátil pescoço calmante intensidade de 3 velocidades + aquecimento infravermelho!,Nao,"**VIDEO GENERATOR PROMPT (Part 1 - 0:00 to 0:10)**
+#26,Postado,,Massageador elétrico portátil pescoço calmante intensidade de 3 velocidades + aquecimento infravermelho,Cuidados Pessoais,"76,99",,https://s.shopee.com.br/3LRWsN8ZUc?share_channel_code=1,,,Não acredito que demorei tanto pra descobrir esse Massageador elétrico portátil pescoço calmante intensidade de 3 velocidades + aquecimento infravermelho!,Nao,"**VIDEO GENERATOR PROMPT (Part 1 - 0:00 to 0:10)**
 
 **Format & Style:**
 Vertical 9:16 (1080x1920), 😱 Chocante / revelation tone. Fast pace, dynamic camera movement, realistic lighting. No static frames at the beginning, motion starts instantly on frame 1. Light background electronic lo-fi music playing softly, not overpowering the voice. 
@@ -1425,3 +1425,77 @@ BEAT BY BEAT BREAKDOWN (0:10 to 0:20):
 - **Visual:** Woman holding the silk shirt up to the camera, framing, hand position, and lighting snapping back to precisely match the very first frame of Part 1 for a seamless loop.
 - **Voiceover (Brazilian Portuguese, 7 words):** Vai pro perfil e procura o **29**. É esse aqui.
 - **On-screen Text (1-3 words):** Item **29**",,,,,,
+#30,Editado,,Blusa Feminina Alfaiataria Peplum Elegante Regata Acinturada com Laço Costas Casual Tendência,Blusas,"39,50",,https://s.shopee.com.br/9pf2fO8vCM?share_channel_code=1,,,Chega de parecer desleixada no trabalho,Nao,"A vertical 9:16 video (1080x1920), crisp lighting, brisk conversational pace. At the very top center of the frame, a permanent badge reads ""ACHADINHO"" in bold letters, maintaining exact position across all cuts. 
+
+**0:00–0:02 (Hook):**
+- **Visual:** Frame 1 starts mid-motion. A stylized collage of newspaper print and vibrant cardboard is instantly ripped apart in one fast, aggressive move by a paper hand. The tear acts as a natural transition mask, immediately revealing real-world hands adjusting a chic tailored peplum top on a person.
+- **Voiceover (Brazilian Portuguese, informal, max 6 words):** Chega de parecer desleixada no trabalho.
+- **On-screen text:** Parecer **desleixada**
+
+**0:02–0:07 (Product in use):**
+- **Visual:** Close-up b-roll. A person wearing the elegant sleeveless peplum blouse with a bow detail on the back. The camera pans smoothly from the cinched waist down to the pleated hem, showing how the fabric structures the silhouette instantly without effort.
+- **Voiceover (Brazilian Portuguese, max 16 words):** Essa regata de alfaiataria acinturada desenha o corpo e resolve qualquer look social na hora.
+- **On-screen text:** Alfaiataria **acinturada**
+
+**0:07–0:08 (Pattern Interrupt):**
+- **Visual:** A hard, lightning-fast punch-in zoom directly onto the elegant bow detail on the back of the blouse. No transition effect, just an abrupt cut.
+- **Voiceover:** (Silence — no voiceover).
+- **On-screen text:** **Detalhe**
+
+**0:08–0:10 (Setup to payoff):**
+- **Visual:** The camera cuts back to a medium shot as the wearer turns around in front of a mirror, smiling, showing the full front view of the structured top.
+- **Voiceover (Brazilian Portuguese, max 10 words):** O segredo tá no corte que modela a cintura.
+- **On-screen text:** Modela a **cintura**
+
+---
+
+```json
+{
+  ""format"": ""Vertical 9:16, 1080x1920"",
+  ""style"": ""Educativo — Tom de dica útil de amigo, calmo, linguagem clara, sem hipérbole"",
+  ""badge"": ""ACHADINHO at top center, identical size and position in every shot"",
+  ""continuity"": ""Maintains exact color palette and texture from Part 1, seamless hard-cut start"",
+  ""beats"": [
+    {
+      ""time"": ""0:10-0:11"",
+      ""visual"": ""Hard cut to close-up of the back of the peplum blouse, showing the elegant bow detail being adjusted by hands."",
+      ""voiceover"": """",
+      ""on_screen_text"": ""Detalhe de **luxo**"",
+      ""word_count"": 0
+    },
+    {
+      ""time"": ""0:11-0:16"",
+      ""visual"": ""Hands demonstrate turning the blouse around to wear it backwards with the bow in the front for a chic halter-style evening look, showing two outfits in one piece."",
+      ""voiceover"": ""Dá pra usar com o laço na frente pra virar um cropped de festa."",
+      ""on_screen_text"": ""Dois em **um**"",
+      ""word_count"": 14
+    },
+    {
+      ""time"": ""0:16-0:18"",
+      ""visual"": ""Quick pull back showing the full blouse neatly tucked into high-waisted trousers, text overlay showing price clearly."",
+      ""voiceover"": ""Custa só trinta e nove e cinquenta."",
+      ""on_screen_text"": ""39,50"",
+      ""word_count"": 7
+    },
+    {
+      ""time"": ""0:18-0:20"",
+      ""visual"": ""In the final 0.5 seconds, framing, hand placement, and lighting snap back to precisely match the first frame of Part 1 for a seamless loop. Bright animated arrow points to channel profile."",
+      ""voiceover"": ""Vai pro perfil e procura o 30. É esse aqui."",
+      ""on_screen_text"": ""Achadinho 30"",
+      ""word_count"": 10
+    }
+  ],
+  ""total_words"": 31,
+  ""audio_notes"": ""Light background music, calm and conversational. Audio cuts clean on the last syllable at 0:20 with zero trailing silence or fade-out.""
+}
+```","[LEGENDA SHORTS]
+Chega de parecer desleixada no trabalho
+
+Achadinho indispensável da Shopee por apenas R$ 39,50! Blusa Feminina Alfaiataria Peplum Elegante Regata Acinturada com Laço Costas Casual Tendência com custo-benefício surreal.
+
+🛒 Link oficial com desconto no perfil do canal! É o produto #30 na nossa vitrine.
+
+#Shorts #achadinhos #shopeebrasil #achadosdashopee #comprinhas #blusas
+
+[FIXAR]
+🛒 O link oficial desse achadinho tá fixado no perfil do canal! É o produto #30 na vitrine.",,,,,
