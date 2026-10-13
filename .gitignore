@@ -32,6 +32,10 @@ fonts/*.ttf
 *.ods
 *.ass
 
+# Ícones do PWA do painel (o *.png acima os excluía — sem eles o
+# manifest quebra e o app não fica instalável)
+!painel/public/*.png
+
 # Temp
 *.tmp
 *.log
