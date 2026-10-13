@@ -5,7 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5.0, viewport-fit=cover">
     <meta name="theme-color" content="#0A0D14">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Painel">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <title>Painel — Fábrica de Achadinhos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -140,6 +145,53 @@
         .laranja { color: var(--shopee); text-shadow: 0 0 18px var(--shopee-glow); }
         .amarelo { color: var(--primary); text-shadow: 0 0 18px var(--primary-glow); }
         .ciano { color: var(--accent-cyan); }
+
+        /* Tendência vs período anterior */
+        .tendencia {
+            display: inline-flex; align-items: center; gap: 4px; margin-top: 5px;
+            font-size: 0.68rem; font-weight: 800; padding: 2px 8px;
+            border-radius: 9999px; letter-spacing: 0.02em;
+        }
+        .tendencia.sobe { background: rgba(52, 211, 153, 0.12); color: #34D399; }
+        .tendencia.desce { background: rgba(238, 77, 45, 0.12); color: var(--shopee); }
+        .tendencia.estavel { background: var(--bg-card-hover); color: var(--text-muted); }
+
+        /* Mini gráficos (horários / dia da semana) */
+        .mini-barras { display: flex; align-items: flex-end; gap: 2px; height: 72px; }
+        .mini-barras .barra {
+            flex: 1; min-height: 2px; border-radius: 3px 3px 0 0;
+            background: linear-gradient(180deg, var(--accent-cyan) 0%, rgba(56, 189, 248, 0.25) 100%);
+            transition: var(--transition);
+        }
+        .mini-barras .barra.pico { background: linear-gradient(180deg, var(--primary) 0%, rgba(255, 214, 0, 0.3) 100%); }
+        .mini-barras .barra:hover, .mini-barras .barra:active { filter: brightness(1.35); }
+        .mini-eixos { display: flex; justify-content: space-between; margin-top: 6px; font-size: 0.62rem; color: var(--text-muted); font-weight: 600; }
+        .pico-info {
+            display: flex; align-items: center; gap: 8px; margin-top: 10px;
+            background: var(--bg-surface); border: 1px solid var(--border);
+            border-radius: var(--radius-sm); padding: 8px 11px; font-size: 0.75rem;
+        }
+        .pico-info b { color: var(--primary); }
+        .pico-info .pulso { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 10px var(--primary); flex-shrink: 0; }
+
+        /* Botão instalar / badge offline */
+        .btn-instalar {
+            display: none; align-items: center; justify-content: center; gap: 7px;
+            background: var(--bg-surface); color: var(--primary);
+            border: 1px solid rgba(255, 214, 0, 0.4); border-radius: 9999px;
+            padding: 0.45rem 1rem; font-size: 0.75rem; font-weight: 800; cursor: pointer;
+            font-family: inherit; transition: var(--transition);
+        }
+        .btn-instalar:hover { background: var(--primary); color: var(--text-dark); }
+        .badge-offline {
+            display: none; align-items: center; justify-content: center; gap: 6px;
+            margin: 0 auto 10px; width: fit-content;
+            background: rgba(238, 77, 45, 0.12); color: var(--shopee);
+            border: 1px solid rgba(238, 77, 45, 0.4); border-radius: 9999px;
+            padding: 0.3rem 0.8rem; font-size: 0.68rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-offline.visible { display: flex; }
 
         /* ═══ Seções ═══ */
         .secao { margin-top: 22px; }
@@ -310,7 +362,18 @@
             <button data-dias="30" class="ativo">30 dias</button>
             <button data-dias="90">90 dias</button>
         </div>
+        <div class="header-acoes">
+            <button id="btn-instalar" class="btn-instalar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Instalar app
+            </button>
+        </div>
     </header>
+
+    <div id="badge-offline" class="badge-offline">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.58 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>
+        <span id="badge-offline-texto">Offline · mostrando dados salvos</span>
+    </div>
 
     <div id="estado-carregando" class="carregando" hidden>
         <div class="spin"></div>
@@ -329,6 +392,7 @@
                 <svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 <div class="label">Visitas</div>
                 <div class="valor" id="kpi-visitas">—</div>
+                <div id="kpi-tendencia"></div>
             </div>
             <div class="kpi">
                 <svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
@@ -362,6 +426,34 @@
             <div class="kpi secundaria">
                 <div class="label">Eventos no período</div>
                 <div class="valor" id="kpi-eventos">—</div>
+            </div>
+        </div>
+
+        <div class="secao" id="sec-horarios" hidden>
+            <div class="sec-header">
+                <div class="ic-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+                <h2>Horários de acesso</h2>
+                <span class="linha"></span>
+            </div>
+            <div class="painel-box">
+                <div class="mini-barras" id="grafico-horas"></div>
+                <div class="mini-eixos"><span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>23h</span></div>
+                <div class="pico-info" id="pico-info" hidden>
+                    <span class="pulso"></span>
+                    <span id="pico-texto"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="secao" id="sec-semana" hidden>
+            <div class="sec-header">
+                <div class="ic-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+                <h2>Visitas por dia da semana</h2>
+                <span class="linha"></span>
+            </div>
+            <div class="painel-box">
+                <div class="mini-barras" id="grafico-semana"></div>
+                <div class="mini-eixos" id="eixos-semana"></div>
             </div>
         </div>
 
@@ -477,7 +569,13 @@
             if (!res.ok && res.status !== 401) return { ok: false, status: res.status };
             const data = await res.json().catch(() => ({}));
             return { ok: !!data.ok, status: res.status };
-        } catch { return { ok: false, status: 0 }; }
+        } catch {
+            // Sem rede (offline ou servidor fora): PIN salvo já foi validado
+            // antes — abre com os dados do cache. O fetch de /api/metricas
+            // devolve o JSON salvo com flag offline e o badge avisa o usuário.
+            // Um 401 real continua caindo no if acima (servidor respondeu).
+            return { ok: true, status: 0, offline: true };
+        }
     }
 
     function mensagemLogin(resultado) {
@@ -552,6 +650,15 @@
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data.sucesso) { falhar(data.detail || 'Erro ao carregar métricas'); return; }
             render(data.metricas);
+            // Dados servidos do cache do SW → mostra badge offline
+            if (data.offline) {
+                const quando = data.cacheado_em
+                    ? new Date(data.cacheado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    : 'sessão anterior';
+                marcarOffline(true, quando);
+            } else {
+                marcarOffline(false);
+            }
             estados('ok');
         } catch {
             falhar('Falha na conexão. Verifique sua internet.');
@@ -630,14 +737,92 @@
         $('tbody-origem').innerHTML =
             (direto ? '<tr><td style="color:var(--text-muted);font-style:italic">Acesso direto / link sem origem (bio no app)</td><td class="dir" style="font-weight:800">' + direto + '</td></tr>' : '') +
             refs.slice(0, 8).map(r =>
-                '<tr><td style="max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.url || '(acesso direto)') +
+                '<tr><td style="max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.nome || r.url || '(acesso direto)') +
                 '</td><td class="dir" style="font-weight:800">' + r.visitas + '</td></tr>').join('');
 
         $('rodape-info').textContent = 'atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + (m.cache ? ' · cache' : '');
+
+        // Tendência vs período anterior (seta no card Visitas)
+        const cresc = m.crescimento_visitantes;
+        const tend = $('kpi-tendencia');
+        if (cresc === null || cresc === undefined) {
+            tend.innerHTML = '';
+        } else {
+            const sobe = cresc > 0;
+            const seta = sobe ? '▲' : (cresc < 0 ? '▼' : '■');
+            const classe = sobe ? 'sobe' : (cresc < 0 ? 'desce' : 'estavel');
+            tend.innerHTML = '<span class="tendencia ' + classe + '">' + seta + ' ' + (cresc > 0 ? '+' : '') + cresc + '% vs anterior</span>';
+        }
+
+        // Horários de acesso (24 barras em ordem de Brasília: 00h→23h)
+        const horas = m.horas_acesso || [];   // index = hora UTC
+        $('sec-horarios').hidden = !horas.some(h => h > 0);
+        if (!$('sec-horarios').hidden) {
+            // hora local i ↔ UTC (i+3)%24 (Brasília = UTC-3)
+            const emBrasil = i => horas[(i + 3) % 24] || 0;
+            const maxH = Math.max(...horas);
+            const pico = m.pico_acesso;
+            const idxPicoBr = pico ? (pico.hora_utc + 21) % 24 : -1;
+            $('grafico-horas').innerHTML = Array.from({ length: 24 }, (_, i) => {
+                const n = emBrasil(i);
+                const alt = Math.max(2, 100 * n / (maxH || 1));
+                return '<div class="barra' + (i === idxPicoBr ? ' pico' : '') + '" style="height:' + alt + '%" title="' + String(i).padStart(2, '0') + 'h: ' + n + ' visita(s)"></div>';
+            }).join('');
+            if (pico) {
+                $('pico-info').hidden = false;
+                $('pico-texto').innerHTML = 'Pico de acesso às <b>' + esc(pico.hora_local) + '</b> com ' + pico.visitas + ' visita(s) registrada(s)';
+            } else {
+                $('pico-info').hidden = true;
+            }
+        }
+
+        // Visitas por dia da semana (Seg–Dom)
+        const semana = m.dias_semana || [];
+        $('sec-semana').hidden = !semana.some(d => d.visitas > 0);
+        if (!$('sec-semana').hidden) {
+            const maxS = Math.max(...semana.map(d => d.visitas));
+            $('grafico-semana').innerHTML = semana.map(d =>
+                '<div class="barra' + (d.visitas === maxS && maxS > 0 ? ' pico' : '') + '" style="height:' + Math.max(2, 100 * d.visitas / (maxS || 1)) + '%" title="' + esc(d.dia) + ': ' + d.visitas + ' visita(s)"></div>').join('');
+            $('eixos-semana').innerHTML = semana.map(d => '<span>' + esc(d.dia) + '</span>').join('');
+        }
     }
 
     // Auto-refresh a cada 60s (só com a aba visível)
     setInterval(() => { if (document.visibilityState === 'visible' && !$('tela-painel').hidden) carregar(); }, 60000);
+
+    // ─── PWA: service worker, botão instalar e badge offline ─────────────────
+
+    let promptInstalacao = null;
+
+    window.addEventListener('beforeinstallprompt', e => {
+        e.preventDefault();
+        promptInstalacao = e;
+        $('btn-instalar').style.display = 'inline-flex';
+    });
+
+    $('btn-instalar').addEventListener('click', async () => {
+        if (!promptInstalacao) return;
+        promptInstalacao.prompt();
+        const { outcome } = await promptInstalacao.userChoice;
+        if (outcome === 'accepted') $('btn-instalar').style.display = 'none';
+        promptInstalacao = null;
+    });
+
+    window.addEventListener('appinstalled', () => {
+        $('btn-instalar').style.display = 'none';
+    });
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => { /* offline-first é best-effort */ });
+    }
+
+    function marcarOffline(ativo, quando) {
+        const badge = $('badge-offline');
+        badge.classList.toggle('visible', ativo);
+        if (ativo) $('badge-offline-texto').textContent = 'Offline · dados de ' + quando;
+    }
+
+    window.addEventListener('online', () => { marcarOffline(false); carregar(); });
 
     // Boot
     (async () => {

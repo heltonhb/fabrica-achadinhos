@@ -145,3 +145,49 @@ def test_erro_analytics_vira_400(monkeypatch):
     res = client.get("/api/metricas", headers={"x-pin": "1234"})
     assert res.status_code == 400
     assert "token" in res.json()["detail"]
+
+
+# ─── PWA: manifest, service worker e ícones ─────────────────────────────────
+
+class TestPwa:
+    """Arquivos estáticos do PWA servidos por rotas explícitas (a Vercel não
+    serve a pasta public/ sozinha no runtime Python)."""
+
+    @pytest.mark.parametrize("caminho,tipo", [
+        ("/manifest.webmanifest", "application/manifest+json"),
+        ("/sw.js", "application/javascript"),
+        ("/icon-192.png", "image/png"),
+        ("/icon-512.png", "image/png"),
+        ("/apple-touch-icon.png", "image/png"),
+    ])
+    def test_serve_estaticos_do_pwa(self, monkeypatch, caminho, tipo):
+        mod = _carregar_modulo(monkeypatch, pin="1234")
+        client = TestClient(mod.app)
+        res = client.get(caminho)
+        assert res.status_code == 200
+        assert tipo in res.headers["content-type"]
+        assert res.content, f"{caminho} veio vazio"
+
+    def test_manifest_declara_o_app(self, monkeypatch):
+        import json
+
+        mod = _carregar_modulo(monkeypatch, pin="1234")
+        client = TestClient(mod.app)
+        manifest = json.loads(client.get("/manifest.webmanifest").content)
+        assert manifest["name"] == "Painel — Fábrica de Achadinhos"
+        assert manifest["display"] == "standalone"
+        assert manifest["start_url"] == "/"
+        assert any("192" in i["sizes"] for i in manifest["icons"])
+        assert any("512" in i["sizes"] for i in manifest["icons"])
+
+    def test_service_worker_permite_escopo_raiz(self, monkeypatch):
+        mod = _carregar_modulo(monkeypatch, pin="1234")
+        client = TestClient(mod.app)
+        res = client.get("/sw.js")
+        assert res.headers.get("service-worker-allowed") == "/"
+
+    def test_estaticos_nao_pedem_pin(self, monkeypatch):
+        """Ícones e manifest são públicos — o gate de PIN vale só pra /api/*."""
+        mod = _carregar_modulo(monkeypatch, pin="1234")
+        client = TestClient(mod.app)
+        assert client.get("/icon-192.png").status_code == 200

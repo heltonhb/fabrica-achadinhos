@@ -96,6 +96,10 @@ class TestResumirHits:
         assert all(p["na_lista"] for p in sem_ref["produtos_clicados"])
 
 
+# total + hits + toprefs + hits-janela-anterior + quebras do público
+N_CHAMADAS = 4 + len(analytics._QUEBRAS)
+
+
 class TestEstatisticasVitrine:
     def _mock_get(self, dados_total, dados_hits, dados_refs):
         def _get(caminho, params):
@@ -103,7 +107,7 @@ class TestEstatisticasVitrine:
                 "stats/total": dados_total,
                 "stats/hits": dados_hits,
                 "stats/toprefs": dados_refs,
-            }[caminho]
+            }.get(caminho, {"stats": []})
 
         return _get
 
@@ -131,7 +135,7 @@ class TestEstatisticasVitrine:
         assert resumo["visitas_total_periodo"] == 40
         assert resumo["periodo"]["dias"] == 7
         assert resumo["site"] == analytics.codigo_site()
-        assert resumo["referrers"][0] == {"url": "instagram.com", "visitas": 22}
+        assert resumo["referrers"][0] == {"url": "instagram.com", "nome": "Instagram", "visitas": 22}
         # referrer vazio é descartado
         assert all(r["url"] for r in resumo["referrers"])
 
@@ -141,7 +145,7 @@ class TestEstatisticasVitrine:
 
         def _get(caminho, params):
             chamadas["n"] += 1
-            return {"stats/total": {"total": 1}, "stats/hits": {"hits": []}, "stats/toprefs": {"stats": []}}[caminho]
+            return {"stats/total": {"total": 1}, "stats/hits": {"hits": []}}.get(caminho, {"stats": []})
 
         monkeypatch.setattr(analytics, "_get", _get)
         analytics.limpar_cache()
@@ -149,7 +153,7 @@ class TestEstatisticasVitrine:
         analytics.estatisticas_vitrine(dias=20)
         analytics.estatisticas_vitrine(dias=20, ids_conhecidos=["#01"])
 
-        assert chamadas["n"] == 6  # 3 chamadas por lista de cache distinta
+        assert chamadas["n"] == 2 * N_CHAMADAS  # chamadas completas por lista de cache distinta
 
     def test_ctr_zero_quando_sem_visitas(self, monkeypatch):
         monkeypatch.setattr(
@@ -165,7 +169,7 @@ class TestEstatisticasVitrine:
 
         def _get(caminho, params):
             chamadas["n"] += 1
-            return {"stats/total": {"total": 1}, "stats/hits": {"hits": []}, "stats/toprefs": {"stats": []}}[caminho]
+            return {"stats/total": {"total": 1}, "stats/hits": {"hits": []}}.get(caminho, {"stats": []})
 
         monkeypatch.setattr(analytics, "_get", _get)
         analytics.limpar_cache()
@@ -174,8 +178,8 @@ class TestEstatisticasVitrine:
         chamadas_1a = chamadas["n"]
         analytics.estatisticas_vitrine(dias=15)
 
-        assert chamadas_1a == 3
-        assert chamadas["n"] == 3  # segunda chamada veio do cache
+        assert chamadas_1a == N_CHAMADAS
+        assert chamadas["n"] == N_CHAMADAS  # segunda chamada veio do cache
 
 
 class TestErrosAmigaveis:
@@ -211,3 +215,69 @@ class TestErrosAmigaveis:
         with pytest.raises(analytics.ErroAnalytics) as exc:
             analytics._get("stats/total", {})
         assert "Sem conexão" in str(exc.value)
+
+
+class TestPerfilPublico:
+    def test_referrer_usa_campo_name(self, monkeypatch):
+        """A API atual devolve o referrer em 'name' — antes a lista vinha sempre vazia."""
+        def _get(caminho, params):
+            return {
+                "stats/total": {"total": 9},
+                "stats/hits": {"hits": []},
+                "stats/toprefs": {"stats": [
+                    {"name": "", "count": 5, "ref_scheme": "o"},
+                    {"id": "instagram.com", "name": "instagram.com", "count": 4},
+                ]},
+            }.get(caminho, {"stats": []})
+
+        monkeypatch.setattr(analytics, "_get", _get)
+        resumo = analytics.estatisticas_vitrine(dias=7, usar_cache=False)
+        assert resumo["referrers"] == [{"url": "instagram.com", "nome": "Instagram", "visitas": 4}]
+        assert resumo["acesso_direto"] == 5
+
+    def test_serie_diaria_e_melhor_dia(self, monkeypatch):
+        total = {"total": 5, "stats": [
+            {"day": "2026-10-02", "daily": 4},
+            {"day": "2026-10-01", "hourly": [1, 0, 0]},
+        ]}
+        assert analytics.serie_diaria(total) == [
+            {"dia": "2026-10-01", "visitas": 1},
+            {"dia": "2026-10-02", "visitas": 4},
+        ]
+        monkeypatch.setattr(
+            analytics, "_get",
+            lambda c, p: {"stats/total": total, "stats/hits": {"hits": []}}.get(c, {"stats": []}),
+        )
+        resumo = analytics.estatisticas_vitrine(dias=7, usar_cache=False)
+        assert resumo["melhor_dia"] == {"dia": "2026-10-02", "visitas": 4}
+        assert resumo["media_diaria"] == 2.5
+
+    def test_resumir_quebra_dispositivos_e_desconhecidos(self):
+        sizes = {"stats": [
+            {"id": "phone", "name": "", "count": 3},
+            {"id": "tablet", "name": "", "count": 0},
+            {"id": "desktop", "name": "", "count": 1},
+        ]}
+        assert analytics.resumir_quebra("stats/sizes", sizes) == [
+            {"nome": "Celular", "visitas": 3, "pct": 75.0},
+            {"nome": "Computador", "visitas": 1, "pct": 25.0},
+        ]
+        locs = {"stats": [
+            {"id": "BR", "name": "Brazil", "count": 7},
+            {"id": "(unknown)", "name": "(unknown)", "count": 2},
+            {"name": "", "count": 1},
+        ]}
+        res = analytics.resumir_quebra("stats/locations", locs)
+        assert res[0] == {"nome": "Brazil", "visitas": 7, "pct": 70.0}
+        assert res[1] == {"nome": "Desconhecido", "visitas": 3, "pct": 30.0}
+
+    def test_falha_em_quebra_nao_derruba_painel(self, monkeypatch):
+        def _get(caminho, params):
+            if caminho == "stats/browsers":
+                raise analytics.ErroAnalytics("GoatCounter retornou 500")
+            return {"stats/total": {"total": 1}, "stats/hits": {"hits": []}}.get(caminho, {"stats": []})
+
+        monkeypatch.setattr(analytics, "_get", _get)
+        resumo = analytics.estatisticas_vitrine(dias=7, usar_cache=False)
+        assert resumo["navegadores"] == []
+        assert resumo["sistemas"] == []

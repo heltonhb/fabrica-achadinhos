@@ -46,7 +46,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Painel da Vitrine")
 
-_PAGINA = Path(__file__).resolve().parent / "public" / "index.html"
+_PASTA_PUBLIC = Path(__file__).resolve().parent / "public"
+_PAGINA = _PASTA_PUBLIC / "index.html"
 _IDS_CACHE: tuple[float, list[str]] | None = None
 
 
@@ -54,6 +55,31 @@ _IDS_CACHE: tuple[float, list[str]] | None = None
 def pagina() -> FileResponse:
     """Serve o mini-app (a Vercel roteia tudo pra cá com o preset FastAPI)."""
     return FileResponse(_PAGINA, headers={"Cache-Control": "no-cache"})
+
+
+# ─── PWA: manifest, service worker e ícones ─────────────────────────────────
+# A Vercel com runtime Python não serve a pasta public/ sozinha — cada arquivo
+# precisa de rota explícita, como a página em GET /.
+
+_ARQUIVOS_PWA: dict[str, tuple[str, str, dict[str, str]]] = {
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json", {}),
+    "/sw.js": ("sw.js", "application/javascript", {"Service-Worker-Allowed": "/"}),
+    "/icon-192.png": ("icon-192.png", "image/png", {}),
+    "/icon-512.png": ("icon-512.png", "image/png", {}),
+    "/apple-touch-icon.png": ("apple-touch-icon.png", "image/png", {}),
+}
+
+
+def _registrar_estatico(caminho: str, nome: str, tipo: str, headers: dict[str, str]) -> None:
+    def rota() -> FileResponse:
+        return FileResponse(_PASTA_PUBLIC / nome, media_type=tipo, headers=headers or None)
+
+    rota.__name__ = f"estatico_{nome.replace('.', '_').replace('-', '_')}"
+    app.add_api_route(caminho, rota, methods=["GET"], include_in_schema=False)
+
+
+for _caminho, (_nome, _tipo, _headers) in _ARQUIVOS_PWA.items():
+    _registrar_estatico(_caminho, _nome, _tipo, _headers)
 
 
 def _pin_configurado() -> str:
