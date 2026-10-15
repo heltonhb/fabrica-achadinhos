@@ -95,6 +95,111 @@ def filtrar_produtos_vitrine(produtos: list[Produto]) -> list[Produto]:
     return validos
 
 
+# Teto de preço para a vitrine (R$). Itens caros/de compra pensada convertem mal
+# em vídeo curto de impulso. Configurável via VITRINE_PRECO_MAX; 0 desliga.
+PRECO_MAX_PADRAO = 200.0
+
+# Regras (palavra-chave sem acento → nicho padronizado), na ordem de prioridade.
+# Nomes sem preposição: a vitrine aplica .title() e viraria "Casa E Cozinha".
+_REGRAS_NICHO: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("masculin",), "Moda Masculina"),
+    (("feminin", "blusa", "sandalia", "pijama", "traje para dormir"), "Moda Feminina"),
+    (("banheiro", "toalha"), "Banheiro"),
+    (("cama", "limpeza", "limoeza", "cuidados com a casa", "cozinha", "eletro",
+      "decoracao", "movel", "moveis"), "Casa"),
+    (("roupa",), "Moda"),
+    (("saude", "cuidados pessoais", "beleza"), "Saúde"),
+    (("tablet", "console", "celular", "gamer", "tecnologia"), "Tech"),
+)
+
+
+def _sem_acento(texto: str) -> str:
+    import unicodedata
+
+    base = unicodedata.normalize("NFKD", texto or "")
+    return "".join(c for c in base if not unicodedata.combining(c)).lower().strip()
+
+
+def padronizar_nicho(nicho: str) -> str:
+    """Agrupa os nichos digitados à mão em poucas categorias estáveis.
+
+    'Moda  feminina', 'Roupa feminina' → 'Moda Feminina'; 'Limoeza' → 'Casa'.
+    Nicho sem regra correspondente é mantido (só com espaços normalizados).
+    """
+    bruto = " ".join((nicho or "").split())
+    chave = _sem_acento(bruto)
+    for palavras, destino in _REGRAS_NICHO:
+        if any(p in chave for p in palavras):
+            return destino
+    return bruto
+
+
+def _preco_numerico(preco: str) -> float | None:
+    """'1.234,56' / 'R$ 39,90' → float; None se vazio ou não numérico."""
+    v = (preco or "").replace("R$", "").replace(" ", "").strip()
+    if not v:
+        return None
+    try:
+        return float(v.replace(".", "").replace(",", ".")) if "," in v else float(v)
+    except ValueError:
+        return None
+
+
+def preco_maximo_vitrine() -> float:
+    """Teto de preço (R$) vindo de VITRINE_PRECO_MAX; 0 ou inválido → sem teto/padrão."""
+    bruto = (obter_segredo("VITRINE_PRECO_MAX") or "").strip()
+    if not bruto:
+        return PRECO_MAX_PADRAO
+    valor = _preco_numerico(bruto)
+    return PRECO_MAX_PADRAO if valor is None else valor
+
+
+def preparar_catalogo_vitrine(
+    produtos: list[Produto],
+    preco_max: float | None = None,
+) -> list[Produto]:
+    """Aplica a limpeza do catálogo sobre os produtos elegíveis.
+
+    1. Remove duplicatas pelo link afiliado (mesmo produto cadastrado 2x);
+       fica o 'Postado' e, em empate, o de menor #ID.
+    2. Remove itens acima do teto de preço (sem preço informado passam).
+    3. Padroniza o nicho (cópia — o objeto original não é alterado).
+
+    Não escreve na planilha nem no CSV: é só a visão da vitrine.
+    """
+    from dataclasses import replace
+
+    teto = preco_maximo_vitrine() if preco_max is None else preco_max
+
+    # 1) deduplicação por link (o parâmetro share_channel_code não distingue produto)
+    por_link: dict[str, Produto] = {}
+    for p in produtos:
+        chave = (p.link_afiliado or "").strip().split("?", 1)[0]
+        atual = por_link.get(chave)
+        if atual is None:
+            por_link[chave] = p
+            continue
+        def prioridade(x: Produto) -> tuple[int, int]:
+            postado = (x.status or "").strip().lower() == "postado"
+            return (0 if postado else 1, _numero_id(x))
+        vencedor, perdedor = (p, atual) if prioridade(p) < prioridade(atual) else (atual, p)
+        por_link[chave] = vencedor
+        logger.info("Duplicata fora da vitrine: %s (mesmo link de %s)", perdedor.id, vencedor.id)
+    mantidos_ids = {id(p) for p in por_link.values()}
+    unicos = [p for p in produtos if id(p) in mantidos_ids]
+
+    # 2) teto de preço
+    resultado = []
+    for p in unicos:
+        valor = _preco_numerico(p.preco)
+        if teto and valor is not None and valor > teto:
+            logger.info("Acima do teto R$ %.0f fora da vitrine: %s (R$ %.2f)", teto, p.id, valor)
+            continue
+        # 3) nicho padronizado
+        resultado.append(replace(p, nicho=padronizar_nicho(p.nicho)))
+    return resultado
+
+
 def _numero_id(p: Produto) -> int:
     """Número do #ID do produto para ordenação (maior = mais recente).
 
@@ -1201,7 +1306,7 @@ def construir_vitrine(
 
     logger.info("Lendo produtos pela porta única (Sheets / fallback CSV)...")
     todos = ler_produtos()
-    elegiveis = filtrar_produtos_vitrine(todos)
+    elegiveis = preparar_catalogo_vitrine(filtrar_produtos_vitrine(todos))
 
     logger.info("Total lido: %d produtos | Elegíveis para vitrine: %d", len(todos), len(elegiveis))
 

@@ -107,9 +107,24 @@ def _get(caminho: str, params: dict[str, Any], _tentativa: int = 0) -> dict[str,
 
 # ─── Parsing (puro, testável sem rede) ────────────────────────────────────────
 
+def _normalizar_caminho(caminho: str) -> str:
+    """Garante a barra inicial: 'cta/hero/25' → '/cta/hero/25'.
+
+    O GoatCounter armazena eventos sem a barra inicial, enquanto pageviews
+    vêm com ela. Normalizar aqui deixa o parser indiferente a isso.
+    """
+    limpo = (caminho or "").strip()
+    if not limpo:
+        return ""
+    return limpo if limpo.startswith("/") else "/" + limpo
+
+
 def decompor_evento_cta(caminho: str) -> tuple[str, str] | None:
-    """'/cta/grade/20' → ('grade', '20'). None se não for evento de CTA."""
-    partes = (caminho or "").strip().split("/")
+    """'/cta/grade/20' → ('grade', '20'). None se não for evento de CTA.
+
+    Aceita também sem a barra inicial ('cta/grade/20').
+    """
+    partes = _normalizar_caminho(caminho).split("/")
     # '', 'cta', '{posição}', '{id}'
     if len(partes) >= 4 and partes[1] == "cta" and partes[2] and partes[3]:
         return partes[2], partes[3]
@@ -154,7 +169,7 @@ def resumir_hits(
     filtros: dict[str, int] = {}
 
     for hit in hits or []:
-        caminho = (hit.get("path") or "").strip()
+        caminho = _normalizar_caminho(hit.get("path") or "")
         contagem = int(hit.get("count") or 0)
 
         if caminho in ("/", "/index.html"):

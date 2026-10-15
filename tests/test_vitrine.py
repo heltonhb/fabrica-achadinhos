@@ -29,6 +29,88 @@ class TestFiltroVitrine:
         assert gerar_vitrine.filtrar_produtos_vitrine([]) == []
 
 
+class TestPrepararCatalogo:
+    def _p(self, id_, link="https://s.shopee.com.br/A?share_channel_code=1", **kw):
+        return Produto(id=id_, nome=f"Produto {id_}", link_afiliado=link, **kw)
+
+    def test_duplicata_por_link_fica_o_postado(self):
+        prods = [
+            self._p("#05", status="Ideia"),
+            self._p("#06", status="Postado"),  # mesmo link, mas postado
+            self._p("#07", link="https://s.shopee.com.br/B"),
+        ]
+        r = gerar_vitrine.preparar_catalogo_vitrine(prods, preco_max=0)
+        assert [p.id for p in r] == ["#06", "#07"]
+
+    def test_duplicata_empate_fica_menor_id(self):
+        prods = [
+            self._p("#18", status="Postado"),
+            self._p("#17", status="Postado"),
+        ]
+        r = gerar_vitrine.preparar_catalogo_vitrine(prods, preco_max=0)
+        assert [p.id for p in r] == ["#17"]
+
+    def test_link_igual_com_query_diferente_e_duplicata(self):
+        prods = [
+            self._p("#01", link="https://s.shopee.com.br/X"),
+            self._p("#02", link="https://s.shopee.com.br/X?share_channel_code=1"),
+        ]
+        assert len(gerar_vitrine.preparar_catalogo_vitrine(prods, preco_max=0)) == 1
+
+    def test_teto_de_preco(self):
+        prods = [
+            self._p("#01", link="l1", preco="39,90"),
+            self._p("#02", link="l2", preco="891,90"),     # caro
+            self._p("#03", link="l3", preco="1.234,56"),   # milhar
+            self._p("#04", link="l4", preco=""),           # sem preço passa
+            self._p("#05", link="l5", preco="150,00"),     # no teto passa
+        ]
+        r = gerar_vitrine.preparar_catalogo_vitrine(prods, preco_max=150)
+        assert [p.id for p in r] == ["#01", "#04", "#05"]
+
+    def test_teto_zero_desliga(self):
+        prods = [self._p("#01", preco="891,90")]
+        assert len(gerar_vitrine.preparar_catalogo_vitrine(prods, preco_max=0)) == 1
+
+    def test_preco_max_via_env(self, monkeypatch):
+        monkeypatch.setenv("VITRINE_PRECO_MAX", "50")
+        prods = [self._p("#01", link="l1", preco="49,90"), self._p("#02", link="l2", preco="89,90")]
+        r = gerar_vitrine.preparar_catalogo_vitrine(prods)
+        assert [p.id for p in r] == ["#01"]
+
+    def test_nao_altera_objeto_original(self):
+        original = self._p("#01", nicho="Moda  feminina")
+        r = gerar_vitrine.preparar_catalogo_vitrine([original], preco_max=0)
+        assert r[0].nicho == "Moda Feminina"
+        assert original.nicho == "Moda  feminina"
+
+    @pytest.mark.parametrize("bruto,esperado", [
+        ("Moda  feminina", "Moda Feminina"),
+        ("roupa feminina", "Moda Feminina"),
+        ("Blusas", "Moda Feminina"),
+        ("Sandálias e Chinelos", "Moda Feminina"),
+        ("Traje para dormir e Pijamas", "Moda Feminina"),
+        ("Moda Masculina", "Moda Masculina"),
+        ("Roupas", "Moda"),
+        ("Banheiros", "Banheiro"),
+        ("Roupas de Cama", "Casa"),
+        ("cama e mesa", "Casa"),
+        ("Limoeza", "Casa"),
+        ("Limpeza", "Casa"),
+        ("Eletro domśticos", "Casa"),
+        ("Eletrodomésticos Grandes", "Casa"),
+        ("Cozinha", "Casa"),
+        ("Artigos de Cuidados com a Casa", "Casa"),
+        ("Saúde", "Saúde"),
+        ("Cuidados Pessoais", "Saúde"),
+        ("Tablets", "Tech"),
+        ("Geral", "Geral"),
+        ("", ""),
+    ])
+    def test_padronizar_nicho(self, bruto, esperado):
+        assert gerar_vitrine.padronizar_nicho(bruto) == esperado
+
+
 class TestGerarHtmlVitrine:
     def test_contem_elementos_obrigatorios(self):
         p = Produto(

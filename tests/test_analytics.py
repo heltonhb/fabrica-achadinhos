@@ -18,6 +18,43 @@ class TestDecomporEventoCta:
         assert analytics.decompor_evento_cta("/cta/grade") is None
         assert analytics.decompor_evento_cta("") is None
 
+    def test_aceita_path_sem_barra_inicial(self):
+        """Regressão: o GoatCounter guarda eventos como 'cta/hero/25' (sem '/')."""
+        assert analytics.decompor_evento_cta("cta/hero/25") == ("hero", "25")
+        assert analytics.decompor_evento_cta("cta/grade/02") == ("grade", "02")
+        assert analytics.decompor_evento_cta("busca/ok/20") is None
+
+
+class TestResumirHitsPathsSemBarra:
+    def test_eventos_reais_do_goatcounter_sao_contados(self):
+        """Regressão: painel mostrava 0 cliques porque os eventos chegam sem '/'.
+
+        Paths copiados da resposta real de /stats/hits.
+        """
+        hits = [
+            {"path": "/", "count": 19, "event": False},
+            {"path": "cta/hero/25", "count": 1, "event": True},
+            {"path": "cta/hero/24", "count": 1, "event": True},
+            {"path": "cta/grade/20", "count": 1, "event": True},
+            {"path": "filtro/all", "count": 1, "event": True},
+            {"path": "busca/ok/20", "count": 1, "event": True},
+            {"path": "busca/sem-resultado/aspirador", "count": 2, "event": True},
+            {"path": "inapp/visita-inapp", "count": 1, "event": True},
+            # pageview de bot em /cta/... continua não sendo clique
+            {"path": "/cta/grade/99", "count": 1, "event": False},
+        ]
+
+        r = analytics.resumir_hits(hits)
+
+        assert r["visitantes"] == 19
+        assert r["cliques_cta"] == 3
+        assert {p["id"] for p in r["produtos_clicados"]} == {"25", "24", "20"}
+        assert r["buscas_ok"] == 1
+        assert r["buscas_sem_resultado"] == 2
+        assert r["buscas_falhas"] == [{"termo": "aspirador", "buscas": 2}]
+        assert r["filtros"] == [{"nicho": "all", "cliques": 1}]
+        assert r["visitas_inapp"] == 1
+
 
 class TestResumirHits:
     def test_agrega_visitas_cta_buscas_e_filtros(self):
