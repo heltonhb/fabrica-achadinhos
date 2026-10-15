@@ -29,6 +29,7 @@ METRICAS_FALSA = {
     "serie_diaria": [],
     "referrers": [],
     "acesso_direto": 0,
+    "visitas_testes": 0,
     "site": "helton",
     "cache": False,
 }

@@ -253,8 +253,35 @@ def _nome_ref(ref: dict[str, Any]) -> str:
     return (ref.get("name") or ref.get("path") or "").strip()
 
 
-def serie_diaria(dados_total: dict[str, Any]) -> list[dict[str, Any]]:
-    """'/stats/total' → [{dia: 'AAAA-MM-DD', visitas: n}] em ordem cronológica."""
+def referrer_interno(ref: str) -> bool:
+    """True p/ origem de teste do próprio dono: localhost, 0.0.0.0, IP de rede local.
+
+    'localhost:8000', '0.0.0.0:8000', '192.168.15.20:8000' → True.
+    """
+    limpo = (ref or "").strip().lower()
+    limpo = limpo.removeprefix("https://").removeprefix("http://")
+    host = limpo.split("/", 1)[0].split(":", 1)[0]
+    if host in ("localhost", "0.0.0.0") or host.endswith(".local"):
+        return True
+    partes = host.split(".")
+    if len(partes) == 4 and all(p.isdigit() for p in partes):
+        a, b = int(partes[0]), int(partes[1])
+        return a in (10, 127) or (a == 192 and b == 168) or (a == 172 and 16 <= b <= 31)
+    return False
+
+
+def serie_diaria(
+    dados_total: dict[str, Any],
+    hits: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """'/stats/total' → [{dia: 'AAAA-MM-DD', visitas: n}] em ordem cronológica.
+
+    Sem ``hits`` usa o próprio /stats/total. Atenção: esse endpoint soma
+    *eventos* (cliques, buscas, filtros) às visitas — com ``hits`` informado a
+    série conta só pageviews da vitrine ('/'), e o dia é o de Brasília (as
+    horas da API são UTC; 22h BRT de domingo já é segunda em UTC). O /stats/total
+    continua sendo usado só para listar os dias da janela, inclusive os zerados.
+    """
     serie = []
     for item in dados_total.get("stats") or []:
         dia = (item.get("day") or "").strip()
@@ -264,7 +291,30 @@ def serie_diaria(dados_total: dict[str, Any]) -> list[dict[str, Any]]:
         if visitas is None:
             visitas = sum(item.get("hourly") or [])
         serie.append({"dia": dia, "visitas": int(visitas or 0)})
-    return sorted(serie, key=lambda d: d["dia"])
+
+    if hits is None:
+        return sorted(serie, key=lambda d: d["dia"])
+
+    por_dia: dict[str, int] = {item["dia"]: 0 for item in serie}
+    for hit in hits:
+        if _normalizar_caminho(hit.get("path") or "") not in ("/", "/index.html"):
+            continue
+        for item in hit.get("stats") or []:
+            dia_utc = (item.get("day") or "").strip()
+            try:
+                base = dt.datetime.combine(dt.date.fromisoformat(dia_utc), dt.time())
+            except ValueError:
+                continue
+            horas = item.get("hourly")
+            if horas:
+                for hora, n in enumerate(horas):
+                    if n:
+                        local = base + dt.timedelta(hours=hora + _OFFSET_BRASILIA_HORAS)
+                        chave = local.strftime("%Y-%m-%d")
+                        por_dia[chave] = por_dia.get(chave, 0) + int(n)
+            else:  # sem detalhe por hora: assume o próprio dia
+                por_dia[dia_utc] = por_dia.get(dia_utc, 0) + int(item.get("daily") or 0)
+    return [{"dia": d, "visitas": n} for d, n in sorted(por_dia.items())]
 
 
 def resumir_quebra(caminho: str, dados: dict[str, Any]) -> list[dict[str, Any]]:
@@ -449,18 +499,25 @@ def estatisticas_vitrine(
     resumo["eventos_total_periodo"] = int(dados_total.get("total_events") or 0)
     # A API devolve o referrer em "name" (versões antigas usavam "path").
     # "url" preserva o domínio cru; "nome" é o amigável p/ exibição.
+    refs_brutos = dados_refs.get("stats") or []
     resumo["referrers"] = [
         {
             "url": _nome_ref(ref),
             "nome": nome_amigavel_referrer(_nome_ref(ref)),
             "visitas": int(ref.get("count") or 0),
         }
-        for ref in (dados_refs.get("stats") or [])
-        if _nome_ref(ref)
+        for ref in refs_brutos
+        if _nome_ref(ref) and not referrer_interno(_nome_ref(ref))
     ]
+    # Testes do próprio dono (localhost, 0.0.0.0, IP de rede local): não são origem.
+    resumo["visitas_testes"] = sum(
+        int(ref.get("count") or 0)
+        for ref in refs_brutos
+        if _nome_ref(ref) and referrer_interno(_nome_ref(ref))
+    )
     resumo["acesso_direto"] = sum(
         int(ref.get("count") or 0)
-        for ref in (dados_refs.get("stats") or [])
+        for ref in refs_brutos
         if not _nome_ref(ref)
     )
 
@@ -491,7 +548,7 @@ def estatisticas_vitrine(
 
 
     # Série diária de visitas (gráfico) + destaques
-    resumo["serie_diaria"] = serie_diaria(dados_total)
+    resumo["serie_diaria"] = serie_diaria(dados_total, hits=dados_hits.get("hits") or [])
     resumo["dias_semana"] = visitas_por_dia_semana(resumo["serie_diaria"])
     dias_com_dado = resumo["serie_diaria"]
     if dias_com_dado:

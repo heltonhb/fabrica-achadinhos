@@ -281,13 +281,93 @@ class TestPerfilPublico:
             {"dia": "2026-10-01", "visitas": 1},
             {"dia": "2026-10-02", "visitas": 4},
         ]
+        hits = [{"path": "/", "count": 5, "stats": [
+            {"day": "2026-10-01", "hourly": [0] * 12 + [1] + [0] * 11},
+            {"day": "2026-10-02", "hourly": [0] * 12 + [4] + [0] * 11},
+        ]}]
         monkeypatch.setattr(
             analytics, "_get",
-            lambda c, p: {"stats/total": total, "stats/hits": {"hits": []}}.get(c, {"stats": []}),
+            lambda c, p: {"stats/total": total, "stats/hits": {"hits": hits}}.get(c, {"stats": []}),
         )
         resumo = analytics.estatisticas_vitrine(dias=7, usar_cache=False)
         assert resumo["melhor_dia"] == {"dia": "2026-10-02", "visitas": 4}
         assert resumo["media_diaria"] == 2.5
+
+    def test_serie_diaria_nao_conta_eventos_como_visitas(self):
+        """Regressão: /stats/total soma eventos; gráfico/melhor dia/média inflavam.
+
+        Dados reais: 19 pageviews + 9 eventos + 1 hit de bot = 29 no total.
+        """
+        total = {"total": 29, "total_events": 9, "stats": [
+            {"day": "2026-10-12", "daily": 15},
+        ]}
+        hits = [
+            {"path": "/", "count": 9, "stats": [
+                {"day": "2026-10-12", "hourly": [0] * 10 + [9] + [0] * 13},
+            ]},
+            {"path": "cta/hero/25", "count": 1, "event": True, "stats": [
+                {"day": "2026-10-12", "hourly": [0] * 14 + [1] + [0] * 9},
+            ]},
+        ]
+        assert analytics.serie_diaria(total, hits=hits) == [
+            {"dia": "2026-10-12", "visitas": 9},
+        ]
+
+    def test_serie_diaria_usa_o_dia_de_brasilia(self):
+        """22h BRT (domingo) = 01h UTC (segunda): deve contar no domingo."""
+        total = {"stats": [
+            {"day": "2026-10-11", "daily": 0},
+            {"day": "2026-10-12", "daily": 0},
+        ]}
+        hits = [{"path": "/", "stats": [
+            {"day": "2026-10-12", "hourly": [0, 3] + [0] * 8 + [2] + [0] * 13},
+        ]}]
+        assert analytics.serie_diaria(total, hits=hits) == [
+            {"dia": "2026-10-11", "visitas": 3},   # 01h UTC → 22h BRT do dia 11
+            {"dia": "2026-10-12", "visitas": 2},   # 10h UTC → 07h BRT
+        ]
+
+    def test_serie_diaria_sem_horas_usa_daily(self):
+        total = {"stats": [{"day": "2026-10-12", "daily": 0}]}
+        hits = [{"path": "/", "stats": [{"day": "2026-10-12", "daily": 4}]}]
+        assert analytics.serie_diaria(total, hits=hits) == [
+            {"dia": "2026-10-12", "visitas": 4},
+        ]
+
+    @pytest.mark.parametrize("ref,esperado", [
+        ("localhost:8000", True),
+        ("0.0.0.0:8000", True),
+        ("192.168.15.20:8000", True),
+        ("10.0.0.5", True),
+        ("172.20.1.1:3000", True),
+        ("http://127.0.0.1:5000/x", True),
+        ("meu-pc.local", True),
+        ("172.32.0.1", False),
+        ("l.instagram.com", False),
+        ("www.facebook.com", False),
+        ("ig", False),
+        ("", False),
+    ])
+    def test_referrer_interno(self, ref, esperado):
+        assert analytics.referrer_interno(ref) is esperado
+
+    def test_referrers_de_teste_saem_da_origem_e_viram_contador(self, monkeypatch):
+        refs = [
+            {"name": "l.instagram.com", "count": 6},
+            {"name": "0.0.0.0:8000", "count": 6},
+            {"name": "localhost:8000", "count": 2},
+            {"name": "192.168.15.20:8000", "count": 1},
+            {"name": "", "count": 3},
+        ]
+        monkeypatch.setattr(
+            analytics, "_get",
+            lambda c, p: {"stats/total": {"total": 1}, "stats/hits": {"hits": []},
+                          "stats/toprefs": {"stats": refs}}.get(c, {"stats": []}),
+        )
+        resumo = analytics.estatisticas_vitrine(dias=7, usar_cache=False)
+        assert [r["nome"] for r in resumo["referrers"]] == ["Instagram"]
+        assert resumo["visitas_testes"] == 9
+        assert resumo["acesso_direto"] == 3
 
     def test_resumir_quebra_dispositivos_e_desconhecidos(self):
         sizes = {"stats": [

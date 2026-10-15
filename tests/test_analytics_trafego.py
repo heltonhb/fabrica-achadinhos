@@ -194,9 +194,10 @@ class TestResumoTrafegoDetalhado:
         assert resumo["pico_acesso"] == {"hora_utc": 10, "hora_local": "07h", "visitas": 7}
         assert len(resumo["horas_acesso"]) == 24
         assert sum(resumo["horas_acesso"]) == 9
-        # dia da semana: 2026-10-05 é segunda, 2026-10-06 é terça
-        assert resumo["dias_semana"][0] == {"dia": "Seg", "visitas": 9}
-        assert resumo["dias_semana"][1] == {"dia": "Ter", "visitas": 0}
+        # dia da semana só com pageviews da vitrine (não soma eventos):
+        # 2026-10-05 é segunda (7 visitas às 10h UTC), 2026-10-06 é terça (2 às 14h UTC)
+        assert resumo["dias_semana"][0] == {"dia": "Seg", "visitas": 7}
+        assert resumo["dias_semana"][1] == {"dia": "Ter", "visitas": 2}
         # referrers: url crua preservada + nome amigável novo
         assert resumo["referrers"][0] == {
             "url": "l.instagram.com", "nome": "Instagram", "visitas": 6,

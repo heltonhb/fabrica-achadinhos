@@ -733,9 +733,11 @@
         // Origem do tráfego
         const refs = m.referrers || [];
         const direto = m.acesso_direto || 0;
-        $('sec-origem').hidden = !refs.length && !direto;
+        const testes = m.visitas_testes || 0;
+        $('sec-origem').hidden = !refs.length && !direto && !testes;
         $('tbody-origem').innerHTML =
             (direto ? '<tr><td style="color:var(--text-muted);font-style:italic">Acesso direto / link sem origem (bio no app)</td><td class="dir" style="font-weight:800">' + direto + '</td></tr>' : '') +
+            (testes ? '<tr><td style="color:var(--text-muted);font-style:italic">Seus testes (localhost / rede local) — não é tráfego real</td><td class="dir" style="font-weight:800;color:var(--text-muted)">' + testes + '</td></tr>' : '') +
             refs.slice(0, 8).map(r =>
                 '<tr><td style="max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.nome || r.url || '(acesso direto)') +
                 '</td><td class="dir" style="font-weight:800">' + r.visitas + '</td></tr>').join('');
