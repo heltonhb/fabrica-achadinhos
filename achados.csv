@@ -1868,7 +1868,7 @@ Cansada de roupa social que aperta? Esse conjunto de alfaiataria em linho com ca
 
 [FIXAR]
 Comente 'QUERO' que te mando o link direto ou acesse o link na bio (vitrine da shopee)!",,,,,
-#36,Editado,,VESTIDO LONGO Feminino Confortável Estiloso Sofisticado Com Fenda e Bojo,Vestidos,"49,39",,https://s.shopee.com.br/6L5AVQarVh?share_channel_code=1,,,Parece grife mas custa quarenta reais.,Nao,"Vertical format 9:16, 1080x1920. Light background music playing at low volume, not overpowering the voiceover. At the top center of every frame, a fixed graphic badge with the text ""ACHADINHO"" in bold letters. Bumper-to-bumper brisk pacing, approximately 3.5 words per second. The video opens instantly with motion, no static frames, no fade-in.
+#36,Postado,,VESTIDO LONGO Feminino Confortável Estiloso Sofisticado Com Fenda e Bojo,Vestidos,"49,39",,https://s.shopee.com.br/6L5AVQarVh?share_channel_code=1,,,Parece grife mas custa quarenta reais.,Nao,"Vertical format 9:16, 1080x1920. Light background music playing at low volume, not overpowering the voiceover. At the top center of every frame, a fixed graphic badge with the text ""ACHADINHO"" in bold letters. Bumper-to-bumper brisk pacing, approximately 3.5 words per second. The video opens instantly with motion, no static frames, no fade-in.
 
 ---
 
@@ -1932,3 +1932,66 @@ Parece grife mas custa quarenta reais. Esse vestido longo com fenda e bojo tá e
 
 [FIXAR]
 Achou barato? O link tá na bio do perfil ou comente EU QUERO que eu te envio no direct! 🛍️✨",,,,,
+#37,Postado,,"Macacão Feminino com fenda, longo e solto, super elegante","Macacões, Macaquinhos e Jardineiras","59,90",,https://s.shopee.com.br/9V2CHe1VYe?share_channel_code=1,,,Achei o macacão mais elegante do mundo,Nao,"- **Format**: Vertical 9:16, 1080×1920.
+- **Top Badge**: Fixed badge ""ACHADINHO"" centered at the very top, identical size and position in every frame.
+- **Background Music**: Light, upbeat background music playing softly, never overpowering the voiceover.
+- **Pacing**: Brisk conversational Brazilian Portuguese voiceover, informal, no emojis, exactly 32 words for Part 1.
+
+---
+
+### SCENE-BY-SCENE PROMPT
+
+**0:00–0:02 | HOOK (Max 6 words)**
+- **Visual Description**: Frame 1 starts mid-action. Strong collage aesthetic mixing cardboard textures, newspaper print, and vibrant colors imitating a print campaign. A textured paper hand is already mid-motion, tearing a cardboard frame in half in one fast sweep. The tear acts as a seamless transition mask, immediately pulling the viewer from the 2D paper collage into real, vibrant video. A woman is reflected in a full-length wooden-framed mirror, struggling to zip a stiff, unyielding tailored jumpsuit with a stuck metal zipper and ripping side seams.
+- **Voiceover (PT-BR)**: ""Achei o macacão mais elegante!"" (5 words)
+- **On-Screen Text**: **MAIS** ELEGANTE
+
+**0:02–0:07 | PRODUCT IN USE (Max 16 words)**
+- **Visual Description**: Fast cut right after the paper tear reveals the real product b-roll. A woman is wearing a fluid, lightweight viscose long jumpsuit in a sunlit room. She adjusts the adjustable straps, walks gracefully showing the daring side slit, and spins to highlight the loose, flowing fabric moving naturally around her body.
+- **Voiceover (PT-BR)**: ""Olha esse tecido de viscose super leve, fenda lateral perfeita e alça regulável."" (14 words)
+- **On-Screen Text**: TECIDO **FLUIDO**
+
+**0:07–0:08 | PATTERN INTERRUPT (0 words)**
+- **Visual Description**: A hard, jarring punch-in cut directly onto the side slit and fluid movement of the viscose fabric, styled with a brief newspaper-print flash frame. Zero voiceover.
+- **Voiceover (PT-BR)**: *(No voiceover)*
+- **On-Screen Text**: **OLHA** ISSO
+
+**0:08–0:10 | SETUP TO PAYOFF (Max 10 words)**
+- **Visual Description**: The camera tracks smoothly down the length of the flowing jumpsuit as the model walks outdoors, sunlight catching the luxurious drape of the fabric. The framing and lighting precisely match the visual setup needed to seamlessly loop back to the opening collage frame.
+- **Voiceover (PT-BR)**: ""O caimento desse modelo vai te surpreender totalmente."" (9 words)
+- **On-Screen Text**: SURPREENDENTE
+
+---
+
+```text
+Generate a vertical 9:16 (1080x1920) AI-generated video prompt in English. The video is Part 2 (from 0:10 to 0:20) of a Shopee marketplace find in Brazil, featuring a long, elegant, loose women's jumpsuit with a side slit. The style is ""Shocking / Revelation tone"", fast-paced, high-energy.
+
+MANDATORY GLOBAL ELEMENTS (applied across all shots):
+- Persistent top-center badge: ""ACHADINHO"" in bold white letters with a solid red background pill.
+- Textures and color palette must seamlessly match Part 1 (warm lighting, rich fabric texture, minimalist neutral background).
+- Background music: Light, upbeat background beat, entirely subordinated to the voiceover volume, no distortion.
+
+SCENE-BY-SCENE BREAKDOWN (Part 2: 0:10 to 0:20):
+
+---
+
+[0:10 - 0:11] CONTINUATION (Visual Only)
+- VISUAL: Fast continuation of the action. A close-up shot of a hand quickly adjusting the elegant fabric and the sophisticated side slit of the loose jumpsuit. No motion blur, crisp focus on the clothing texture.
+- AUDIO: Zero voiceover. Only the crisp fabric rustle sound effect.
+- ON-SCREEN TEXT: ""Com **fenda**"" (White background, yellow bold highlight on ""fenda"").
+
+[0:11 - 0:16] CREATIVE USE / PLOT TWIST (The ""Wow"" Moment)
+- VISUAL: The woman is at a high-end outdoor restaurant patio. She suddenly steps up onto a decorative stone bench, demonstrating how the loose, flowing design and high side slit allow total freedom of movement without losing an ounce of elegance. She twirls playfully, the fabric billowing out dramatically in the wind.
+- AUDIO (VOICEOVER IN BRAZILIAN PORTUGUESE, informal, no emojis): ""Dá pra usar em festa chique ou até pra correr o dia inteiro."" (Word count: 12 words. Spoken pace: brisk, energetic, ~3.5 words/sec).
+- ON-SCREEN TEXT: ""Total **liberdade**"" (White background, yellow bold highlight on ""liberdade"").
+
+[0:16 - 0:18] PRICE REVEAL (Dramatic pause before price)
+- VISUAL: Sudden hard cut to a clean, brightly lit indoor mirror shot. The woman holds the tag near her waist while pointing directly at it with a shocked expression.
+- AUDIO (VOICEOVER IN BRAZILIAN PORTUGUESE): ""Tudo isso por só cinquenta e nove e noventa."" (Word count: 8 words).
+- ON-SCREEN TEXT: ""59,90"" displayed clearly as plain digits in large yellow font, centered on screen.
+
+[0:18 - 0:20] CTA + SEAMLESS LOOP
+- VISUAL: The woman stands in the exact same starting pose, framing, hand position, and lighting as the opening frame of Part 1, creating a flawless visual loop. A bright animated arrow points toward the top edge representing the profile.
+- AUDIO (VOICEOVER IN BRAZILIAN PORTUGUESE): ""Vai pro perfil e procura o... 37. É esse aqui."" (Word count: 11 words. The number ""37"" is spoken slowly, clearly separated from the rest of the sentence. Audio cuts clean on the final syllable with zero trailing silence or fade-out).
+- ON-SCREEN TEXT: ""**Achadinho** 37"" (Yellow bold highlight on ""Achadinho"").
+```",,,,,,
